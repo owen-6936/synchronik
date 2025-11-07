@@ -17,7 +17,7 @@ describe("RunMode execution benchmarks", () => {
   const mockProcess = (
     id: string,
     workerIds: string[],
-    runMode: "parallel" | "sequential" | "isolated"
+    runMode: "parallel" | "sequential" | "isolated" | "batched"
   ): SynchronikProcess => ({
     id,
     status: "idle",

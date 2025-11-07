@@ -18,7 +18,7 @@
     "dist"
   ],
   "scripts": {
-    "test": "vitest run --cache",
+    "test": "vitest run --cache --include 'src/tests/**/*.test.ts'",
     "test:watch": "vitest --watch --cache",
     "prebuild": "rm -rf dist && tsc --noEmit",
     "build": "swc src -d dist --strip-leading-paths --copy-files && tsc -p tsconfig.build.json",

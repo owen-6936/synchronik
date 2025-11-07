@@ -139,8 +139,12 @@ export function createSynchronikManager(): SynchronikManager {
     },
     /**
      * Manually triggers the execution of a process and all its associated workers.
+     * The execution order is determined by the process's `runMode` property,
+     * which can be 'sequential', 'parallel', 'isolated', or 'batched'.
+     * - sequential: Workers are executed one after another.
+     * - parallel: All workers are executed concurrently.
+     * - isolated: Workers are executed sequentially with a small delay between each.
      * The execution order is determined by the process's `runMode` property.
-     * ('sequential', 'parallel', or 'isolated'). Defaults to 'sequential'.
      * @param id The ID of the process to run.
      */
     async runProcessById(id) {
