@@ -43,7 +43,7 @@ describe("SynchronikManager", () => {
     const w = mockWorker("w2");
     manager.registerUnit(w);
 
-    await manager.runUnitById("w2");
+    await manager.runWorkerById("w2");
     expect(w.run).toHaveBeenCalled();
     expect(events.some((e) => e.id.includes("w2"))).toBe(true);
   });
@@ -121,5 +121,53 @@ describe("SynchronikManager", () => {
     manager.startAll();
     expect(manager.getUnitStatus("w9")).toBe("idle");
     expect(manager.getUnitStatus("w10")).toBe("idle");
+  });
+  it("runs process in parallel mode", async () => {
+    const p = mockProcess("p-parallel", ["w11", "w12"]);
+    p.runMode = "parallel";
+    manager.registerUnit(p);
+    p.workers.forEach((w) => manager.registerUnit(w));
+
+    const start = Date.now();
+    await manager.runProcessById("p-parallel");
+    const duration = Date.now() - start;
+
+    expect(duration).toBeLessThan(50); // fast execution
+    expect(events.some((e) => e.payload?.runMode === "parallel")).toBe(true);
+
+    for (const w of p.workers) {
+      expect(w.run).toHaveBeenCalled();
+      expect(manager.getUnitStatus(w.id)).toBe("completed");
+    }
+  });
+
+  it("runs process in isolated mode with delay", async () => {
+    const p = mockProcess("p-isolated", ["w13", "w14"]);
+    p.runMode = "isolated";
+    manager.registerUnit(p);
+    p.workers.forEach((w) => manager.registerUnit(w));
+
+    const start = Date.now();
+    await manager.runProcessById("p-isolated");
+    const duration = Date.now() - start;
+
+    expect(duration).toBeGreaterThanOrEqual(100); // delay expected
+    expect(events.some((e) => e.payload?.runMode === "isolated")).toBe(true);
+
+    for (const w of p.workers) {
+      expect(w.run).toHaveBeenCalled();
+      expect(manager.getUnitStatus(w.id)).toBe("completed");
+    }
+  });
+  it("emits milestone with runMode in payload", async () => {
+    const p = mockProcess("p-mode", ["w15"]);
+    p.runMode = "sequential";
+    manager.registerUnit(p);
+    p.workers.forEach((w) => manager.registerUnit(w));
+
+    await manager.runProcessById("p-mode");
+
+    const hasRunMode = events.some((e) => e.payload?.runMode === "sequential");
+    expect(hasRunMode).toBe(true);
   });
 });

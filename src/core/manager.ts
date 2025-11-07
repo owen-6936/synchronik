@@ -115,20 +115,21 @@ export function createSynchronikManager(): SynchronikManager {
     },
 
     /**
-     * Manually triggers the execution of a single unit by its ID.
-     * @param id The ID of the unit to run.
+     * Manually triggers the execution of a single worker by its ID.
+     * @param id The ID of the worker to run.
      */
-    async runUnitById(id) {
+    async runWorkerById(id) {
       const unit = registry.getUnitById(id);
       if (!unit || unit.status === "paused") return;
+
+      // Ensure it's a worker
+      if (!("run" in unit) || typeof unit.run !== "function") return;
 
       tracker.setStatus(id, "running");
 
       try {
-        if ("run" in unit && typeof unit.run === "function") {
-          await unit.run();
-          tracker.setStatus(id, "completed", { emitMilestone: true });
-        }
+        await unit.run();
+        tracker.setStatus(id, "completed", { emitMilestone: true });
       } catch (err) {
         tracker.setStatus(id, "error", {
           emitMilestone: true,
@@ -136,22 +137,45 @@ export function createSynchronikManager(): SynchronikManager {
         });
       }
     },
-
     /**
      * Manually triggers the execution of a process and all its associated workers.
+     * The execution order is determined by the process's `runMode` property.
+     * ('sequential', 'parallel', or 'isolated'). Defaults to 'sequential'.
      * @param id The ID of the process to run.
      */
     async runProcessById(id) {
       const process = registry.getProcessById(id);
       if (!process || process.status === "paused") return;
 
-      tracker.setStatus(id, "running");
+      tracker.setStatus(id, "running", {
+        emitMilestone: true,
+        payload: { runMode: process.runMode ?? "sequential" },
+      });
 
-      await Promise.all(
-        process.workers.map((worker) => this.runUnitById(worker.id))
+      const workers = process.workers.filter(
+        (w) => w.enabled && w.status !== "paused" && w.status !== "completed"
       );
 
-      tracker.setStatus(id, "completed", { emitMilestone: true });
+      const runMode = process.runMode ?? "sequential";
+
+      if (runMode === "parallel") {
+        await Promise.all(workers.map((w) => this.runWorkerById(w.id)));
+      } else if (runMode === "isolated") {
+        for (const worker of workers) {
+          await this.runWorkerById(worker.id);
+          await new Promise((r) => setTimeout(r, 100)); // clarity delay
+        }
+      } else {
+        // default: sequential
+        for (const worker of workers) {
+          await this.runWorkerById(worker.id);
+        }
+      }
+
+      tracker.setStatus(id, "completed", {
+        emitMilestone: true,
+        payload: { runMode },
+      });
     },
 
     /**

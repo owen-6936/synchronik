@@ -1,3 +1,5 @@
+export type RunMode = "parallel" | "sequential" | "batched" | "isolated";
+
 export interface SynchronikUnit {
   id: string;
   name: string;
@@ -5,6 +7,14 @@ export interface SynchronikUnit {
   enabled: boolean;
   status?: "idle" | "running" | "error" | "completed" | "paused";
   lastRun?: Date;
+
+  /**
+   * Determines how workers within a process are executed.
+   * - `parallel`: All workers run concurrently.
+   * - `sequential`: Workers run one after another.
+   * - `isolated`: Workers run sequentially with a small delay between each.
+   */
+  runMode?: RunMode;
 
   // 🎯 Event hooks
   onStart?: () => void;
@@ -33,7 +43,7 @@ export interface SynchronikManager {
   stopAll: () => void;
 
   // Execution
-  runUnitById: (id: string) => Promise<void>;
+  runWorkerById: (workerId: string) => Promise<void>;
   runProcessById: (processId: string) => Promise<void>;
 
   // Status and querying
@@ -84,6 +94,8 @@ export interface SynchronikVisualizer {
     message?: string
   ) => void;
 
+  renderUnitMode?: (unitId: string, mode: RunMode) => void;
+
   attachToEventBus: (eventBus: SynchronikEventBus) => void;
 }
 
@@ -124,6 +136,7 @@ export interface StatusTracker {
 
 export interface SynchronikLoop {
   run: () => Promise<void>;
+  executionStrategy?: "auto" | "parallel" | "sequential";
 }
 
 export interface UnitWatcher {
@@ -144,7 +157,7 @@ export interface SynchronikManager {
   // 🔧 Manual control
   startAll: () => void;
   stopAll: () => void;
-  runUnitById: (id: string) => Promise<void>;
+  runWorkerById: (workerId: string) => Promise<void>;
   runProcessById: (id: string) => Promise<void>;
 }
 

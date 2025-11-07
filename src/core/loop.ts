@@ -62,22 +62,34 @@ export function createSynchronikLoop(
 
         tracker.setStatus(process.id, "running");
 
-        await Promise.all(
-          process.workers.map((worker) => {
-            if (
-              worker.status === "paused" ||
-              worker.status === "completed" ||
-              process.status === "paused"
-            ) {
-              return;
-            }
-
-            return runWorker(worker, process.id);
-          })
+        const workers = process.workers.filter(
+          (w) => w.enabled && w.status !== "completed" && w.status !== "paused"
         );
+
+        const runMode = process.runMode ?? "sequential";
+
+        tracker.setStatus(process.id, "running", {
+          emitMilestone: true,
+          payload: { runMode },
+        });
+
+        if (runMode === "parallel") {
+          await Promise.all(workers.map((w) => runWorker(w, process.id)));
+        } else if (runMode === "isolated") {
+          for (const worker of workers) {
+            await runWorker(worker, process.id);
+            await new Promise((r) => setTimeout(r, 100)); // small delay for clarity
+          }
+        } else {
+          // default: sequential
+          for (const worker of workers) {
+            await runWorker(worker, process.id);
+          }
+        }
 
         tracker.setStatus(process.id, "completed", {
           emitMilestone: true,
+          payload: { runMode },
         });
       }
     },

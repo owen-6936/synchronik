@@ -1,0 +1,18 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["./src/index.ts"],
+  "out": "docs",
+  "name": "Synchronik Engine Documentation",
+  "readme": "README.md",
+  "tsconfig": "tsconfig.json",
+  "entryPointStrategy": "resolve",
+  "exclude": ["**/*.test.ts", "src/types/databases/*", "src/types/tmdb.ts"],
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeInternal": true,
+  "hideGenerator": true,
+  "includeVersion": true,
+  "theme": "default",
+  "gitRemote": "origin",
+  "gitRevision": "main"
+}

@@ -1,112 +1,43 @@
-# popflix-synchron 🎬✨
-
-**Metadata Synchronization and Enrichment Service for PopFlix**
+<!-- omit in toc -->
+<div align="center">
+  <h1>
+    Synchronik ✨
+  </h1>
+  <p>
+    A modular orchestration engine for building resilient, milestone-driven workflows in Node.js.
+  </p>
+</div>
 
 [![Node.js Version](https://img.shields.io/badge/Node.js-20+-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strongly%20Typed-blue)](https://www.typescriptlang.org/)
-[![Database](https://img.shields.io/badge/Database-MySQL-orange)](https://www.mysql.com/)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache--2.0-green)](LICENSE)
 
 ---
 
 ## 📖 Overview
 
-`Synchronik` is a modular orchestration engine for contributor clarity and cognitive celebration. It transforms manual workflows into milestone-driven automation, letting your code coordinate tasks while you reclaim flow. With schema-aware batch handling, real-time overlays, and teachable subsystems.
+`Synchronik` is a lightweight, event-driven orchestration engine designed to bring clarity and control to complex, asynchronous workflows. It transforms manual or tangled processes into clean, observable, and milestone-driven automation.
 
-It operates asynchronously to minimize latency and uses careful **rate-limiting** to adhere to third-party API usage policies. This ensures the PopFlix database is continuously synchronized with the latest poster images and official trailer URLs.
+Whether you're coordinating data pipelines, managing background jobs, or building resilient micro-services, Synchronik provides the core components to let your code orchestrate itself while you focus on the business logic.
 
 ### 🎯 Key Features
 
-* **TypeScript-First:** Built with TypeScript for strong typing, improved maintainability, and early error detection.
-* **Incremental Batch Processing:** Selects and processes records in batches of 100 to manage memory and resource usage.
-* **Resilient API Handling:** Uses `axios` to fetch data from The Movie Database (TMDB) using the IMDb ID (`tconst`) as a cross-reference key.
-* **Rate Limiting:** Implements a controlled delay (`setTimeout`) between API calls to prevent throttling and service interruption.
-* **Database Upsert Logic:** Utilizes SQL `ON DUPLICATE KEY UPDATE` logic for idempotent, reliable database operations.
+* **Modular Architecture:** Composed of distinct, swappable components (`Manager`, `Registry`, `Loop`, `Watcher`) for clear separation of concerns.
+* **Event-Driven:** Subscribe to the entire lifecycle of your tasks. React to `start`, `complete`, `error`, and custom `milestone` events in real-time.
+* **Robust State Management:** Reliably track the status of every task (`idle`, `running`, `paused`, `completed`, `error`).
+* **Automatic & Manual Control:** Run tasks on a scheduled interval with the main execution loop or trigger them manually via the API.
+* **Extensible by Design:** Register your own asynchronous functions as `Workers` and group them into `Processes`.
+* **Resilience Built-In:** Includes a `Watcher` to detect and handle stale or stuck tasks, ensuring your engine remains healthy.
+* **Visualization Hooks:** The event bus makes it trivial to connect real-time dashboards and monitoring tools.
 
 ---
 
-## 🛠️ Technology Stack
-
-| Component | Technology | Role |
-| :--- | :--- | :--- |
-| **Runtime** | Node.js | Server-side JavaScript environment. |
-| **Language** | TypeScript | Provides static type-checking and modern JS features. |
-| **HTTP Client** | `axios` | Promise-based library for making external API calls to TMDB. |
-| **Database** | MySQL | Stores the core IMDb data and the enriched `MediaLinks`. |
-| **DB Client** | `mysql2` | High-performance, promise-based driver for MySQL. |
-| **Configuration** | `dotenv` | Securely loads environment variables for secrets and keys. |
-| **Tooling** | `ts-node` | Executes TypeScript files directly for rapid development. |
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-You will need the following installed:
-
-1. **Node.js (LTS)**
-2. **MySQL Server**
-3. **TMDB API Key:** Register for a free Developer API key from [The Movie Database (TMDB)](https://www.themoviedb.org/documentation/api).
+## Getting Started
 
 ### Installation
 
-1. **Clone the repository:**
-
-    ```bash
-    git clone [https://github.com/owen-6936/popflix-synchron.git](https://github.com/owen-6936/popflix-synchron.git)
-    cd popflix-synchron
-    ```
-
-2. **Install dependencies:**
-
-    ```bash
-    npm install
-    ```
-
-### Configuration (`.env` file)
-
-Create a file named **`.env`** in the root directory and add your secret keys and database credentials:
-
 ```bash
-
-# Database Configuration
-
-DB\_HOST=localhost
-DB\_USER=root
-DB\_PASSWORD=your\_secure\_password
-DB\_NAME=popflix\_db
-
-# External API Keys
-
-TMDB\_API\_KEY=YOUR\_TMDB\_API\_KEY\_HERE
-
-````
-
-### Database Setup
-
-1. Ensure you have run the initial IMDb core import into your database.
-2. Execute the script to create the `MediaLinks` table (refer to the `create_media_links_table.sql` file):
-
-```sql
-CREATE TABLE IF NOT EXISTS MediaLinks (
-    imdb_id VARCHAR(10) NOT NULL PRIMARY KEY,
-    tmdb_id INT,
-    poster_url VARCHAR(2048),
-    trailer_embed_url VARCHAR(2048),
-    processed_status ENUM('PENDING', 'SUCCESS', 'FAILED') NOT NULL DEFAULT 'PENDING',
-    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (imdb_id) REFERENCES TitleBasics(tconst)
-);
-````
-
-### Running the Synchronizer
-
-Use `ts-node` to execute the main synchronization script:
-
-```bash
-# Execute the service in development mode
-npx ts-node synchronizer.ts
+npm install popflix-synchron
 ```
 
 The service will begin fetching and updating in batches, pausing between each API call to respect rate limits.
@@ -162,3 +93,222 @@ popflix-synchron/
 This project is a personal development effort by **Owen**.
 
 This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
+
+---
+
+## 🏛️ Core Engine Architecture
+
+The Synchronik engine is built around a modular architecture orchestrated by a central `SynchronikManager`. While the manager provides the primary public API, it's helpful to understand the components it coordinates internally.
+
+| Component | File (`src/core/`) | Role |
+| :--- | :--- | :--- |
+| **Manager** | `manager.ts` | The main public interface. It integrates all other components and provides methods to control the engine's lifecycle, execute units, and subscribe to events. |
+| **Registry** | `registry.ts` | An in-memory database that stores the state of all registered units (workers and processes). |
+| **Lifecycle** | `lifecycle.ts` | Manages the registration, state updates, and release of units. It ensures that state changes are valid and emits corresponding events. |
+| **Event Bus** | `event.ts` | A publish-subscribe system that broadcasts events (`start`, `complete`, `error`, `milestone`) across the engine, allowing components to react to changes in real-time. |
+| **Status Tracker**| `status-tracker.ts` | A dedicated module for setting and tracking the status of units. It acts as the single source of truth for status changes and emits milestones accordingly. |
+| **Loop** | `loop.ts` | The heart of the engine's execution logic. It runs on a configurable interval, identifies `idle` units, and executes them. |
+| **Watcher** | `watcher.ts` | A background process that scans for stale or stuck units and can automatically un-pause them, ensuring the engine remains active. |
+| **Dashboard** | `dashboard.ts` | A simple, optional console utility for visualizing the state of the engine in real-time. |
+
+### The `SynchronikManager`
+
+The `SynchronikManager` is the primary abstraction and your main entry point for interacting with the engine. It exposes a clean and powerful API for orchestrating complex workflows without needing to manage the underlying components directly.
+
+#### Creating a Manager
+
+You can create a manager instance using the `createSynchronikManager` factory function.
+
+```typescript
+import { createSynchronikManager } from 'popflix-synchron'; // or your local path
+
+const manager = createSynchronikManager();
+```
+
+#### Core Lifecycle Methods
+
+These methods control the overall state of the engine.
+
+* **`manager.start()`**
+    Starts the engine's background processes, including the main execution `loop` and the `watcher`.
+
+    ```typescript
+    manager.start();
+    console.log("Synchronik engine is running.");
+    ```
+
+* **`manager.stop()`**
+    Gracefully stops the engine. It clears the background intervals and attempts to complete any in-progress work before exiting.
+
+    ```typescript
+    await manager.stop();
+    console.log("Synchronik engine has stopped.");
+    ```
+
+* **`manager.startAll()` / `manager.stopAll()`**
+    These methods provide bulk control over all registered units, setting their status to `idle` or `paused` respectively.
+
+    ```typescript
+    // Pause all operations
+    manager.stopAll();
+
+    // Resume all operations
+    manager.startAll();
+    ```
+
+#### Unit Registration and Management
+
+These methods allow you to add, remove, and inspect units in the engine.
+
+* **`manager.registerUnit(unit)`**
+    Adds a new worker or process to the engine's registry.
+
+    ```typescript
+    const myWorker = {
+      id: 'my-first-worker',
+      status: 'idle',
+      run: async () => { console.log('Worker is running!'); }
+    };
+    manager.registerUnit(myWorker);
+    ```
+
+* **`manager.releaseUnit(id)`**
+    Removes a unit from the registry.
+
+    ```typescript
+    manager.releaseUnit('my-first-worker');
+    ```
+
+* **`manager.listUnits()`**
+    Returns an array of all currently registered units.
+
+    ```typescript
+    const allUnits = manager.listUnits();
+    console.log(`There are ${allUnits.length} units registered.`);
+    ```
+
+#### Manual Execution
+
+While the engine can run units automatically, you can also trigger them manually.
+
+* **`manager.runUnitById(id)`**
+    Immediately executes a single unit (worker or process) by its ID, provided it is not paused.
+
+    ```typescript
+    await manager.runUnitById('my-first-worker');
+    ```
+
+* **`manager.runProcessById(id)`**
+    Executes a process and all of its associated workers in parallel.
+
+    ```typescript
+    // Assuming 'my-process' is a registered process with workers
+    await manager.runProcessById('my-process');
+    ```
+
+#### Event Subscription and Milestones
+
+The engine is event-driven. You can subscribe to these events to monitor its activity or trigger external actions.
+
+* **`manager.subscribeToEvents(listener)`**
+    Subscribes to all core events (`start`, `complete`, `error`, `milestone`). Returns an `unsubscribe` function.
+
+    ```typescript
+    const unsubscribe = manager.subscribeToEvents(event => {
+      console.log(`Event received: ${event.type} for unit ${event.unitId}`);
+    });
+
+    // Later, to stop listening:
+    unsubscribe();
+    ```
+
+* **`manager.onMilestone(handler)`**
+    A convenience method to subscribe only to `milestone` events.
+
+    ```typescript
+    manager.onMilestone((milestoneId, payload) => {
+      console.log(`Milestone: ${milestoneId}`, payload);
+    });
+    ```
+
+* **`manager.emitMilestone(id, payload)`**
+    Allows you to emit your own custom milestones from anywhere in your application.
+
+    ```typescript
+    manager.emitMilestone('user-logged-in', { userId: 123 });
+    ```
+
+---
+
+### Advanced Usage: Processes and Workers
+
+A `Process` is a special type of unit that groups multiple `Workers` together. When you run a `Process`, the manager will execute all of its associated workers in parallel. This is useful for orchestrating complex workflows where several tasks need to run concurrently.
+
+Here is an example of how to define and run a process that manages two workers: one for fetching user data and another for fetching product data.
+
+```typescript
+import {
+  createSynchronikManager,
+  SynchronikProcess,
+  SynchronikWorker,
+} from 'synchronik';
+
+async function main() {
+  // 1. Create the manager
+  const manager = createSynchronikManager();
+
+  // 2. Define your workers
+  const userFetcher: SynchronikWorker = {
+    id: 'user-data-worker',
+    status: 'idle',
+    run: async () => {
+      console.log('Worker [user-data-worker]: Starting to fetch user data...');
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network request
+      console.log('Worker [user-data-worker]: Finished fetching user data.');
+      manager.emitMilestone('users-fetched', { count: 100 });
+    },
+  };
+
+  const productFetcher: SynchronikWorker = {
+    id: 'product-data-worker',
+    status: 'idle',
+    run: async () => {
+      console.log('Worker [product-data-worker]: Starting to fetch product data...');
+      await new Promise(resolve => setTimeout(resolve, 2500)); // Simulate a longer request
+      console.log('Worker [product-data-worker]: Finished fetching product data.');
+      manager.emitMilestone('products-fetched', { count: 5000 });
+    },
+  };
+
+  // 3. Define the process that groups the workers
+  const dataIngestionProcess: SynchronikProcess = {
+    id: 'data-ingestion-process',
+    status: 'idle',
+    workers: [userFetcher, productFetcher],
+  };
+
+  // 4. Register all units with the manager
+  manager.registerUnit(dataIngestionProcess);
+  manager.registerUnit(userFetcher);
+  manager.registerUnit(productFetcher);
+
+  // 5. Subscribe to events to see the orchestration in action
+  manager.subscribeToEvents(event => {
+    if (event.type === 'milestone') {
+      console.log(`EVENT: Milestone hit -> ${event.milestoneId}`);
+    } else {
+      console.log(`EVENT: Unit '${event.unitId}' status changed to -> ${event.type}`);
+    }
+  });
+
+  // 6. Run the entire process by its ID
+  console.log('--- Starting Data Ingestion Process ---');
+  await manager.runProcessById('data-ingestion-process');
+  console.log('--- Data Ingestion Process Finished ---');
+}
+
+main();
+
+```
+
+When you run this code, you will see the `SynchronikManager` start the process, execute both workers concurrently, and then mark the process as complete only after both workers have finished their tasks. The event log will clearly show the status changes for each unit.

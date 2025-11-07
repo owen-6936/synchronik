@@ -4,6 +4,7 @@ import { createSynchronikRegistry } from "../../core/registry";
 import { createStatusTracker } from "../../core/status-tracker";
 import { createMilestoneEmitter, SynchronikEventBus } from "../../core/event";
 import { createSynchronikLifecycle } from "../../core/lifecycle";
+import { SynchronikUnit } from "../../types/synchronik";
 
 describe("SynchronikLoop", () => {
   let registry: ReturnType<typeof createSynchronikRegistry>;
@@ -31,6 +32,7 @@ describe("SynchronikLoop", () => {
     workers: workerIds.map((wid) => mockWorker(wid)),
     name: "Mock Process",
     enabled: true,
+    runMode: "sequential" as SynchronikUnit["runMode"],
   });
 
   beforeEach(() => {
@@ -124,5 +126,72 @@ describe("SynchronikLoop", () => {
     await loop.run();
 
     expect(w.run).not.toHaveBeenCalled();
+  });
+
+  it("runs workers in parallel when runMode is 'parallel'", async () => {
+    const p = mockProcess("p6", ["w9", "w10"]);
+    p.runMode = "parallel";
+    registry.registerUnit(p);
+    p.workers.forEach((w) => registry.registerUnit(w));
+
+    const start = Date.now();
+    await loop.run();
+    const duration = Date.now() - start;
+
+    // Parallel should be fast (no sequential delay)
+    expect(duration).toBeLessThan(50);
+
+    for (const w of p.workers) {
+      expect(w.run).toHaveBeenCalled();
+      expect(tracker.getStatus(w.id)).toBe("completed");
+    }
+  });
+
+  it("runs workers sequentially with delay when runMode is 'isolated'", async () => {
+    const p = mockProcess("p7", ["w11", "w12"]);
+    p.runMode = "isolated";
+    registry.registerUnit(p);
+    p.workers.forEach((w) => registry.registerUnit(w));
+
+    const start = Date.now();
+    await loop.run();
+    const duration = Date.now() - start;
+
+    // Isolated should take longer due to delay
+    expect(duration).toBeGreaterThanOrEqual(100);
+
+    for (const w of p.workers) {
+      expect(w.run).toHaveBeenCalled();
+      expect(tracker.getStatus(w.id)).toBe("completed");
+    }
+  });
+
+  it("emits milestone with runMode in payload", async () => {
+    const eventBus = new SynchronikEventBus();
+    const milestoneEmitter = createMilestoneEmitter(eventBus);
+    const lifecycle = createSynchronikLifecycle(
+      registry,
+      eventBus,
+      milestoneEmitter
+    );
+    tracker = createStatusTracker(lifecycle);
+    loop = createSynchronikLoop(registry, tracker);
+
+    const milestoneSpy = vi.fn();
+    eventBus.subscribe("milestone", milestoneSpy);
+
+    const p = mockProcess("p8", ["w13"]);
+    p.runMode = "parallel";
+    registry.registerUnit(p);
+    p.workers.forEach((w) => registry.registerUnit(w));
+
+    await loop.run();
+
+    const milestonePayloads = milestoneSpy.mock.calls.map(([e]) => e.payload);
+    const hasRunMode = milestonePayloads.some(
+      (payload) => payload?.runMode === "parallel"
+    );
+
+    expect(hasRunMode).toBe(true);
   });
 });
