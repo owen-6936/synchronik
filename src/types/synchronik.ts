@@ -1,3 +1,64 @@
+export type Status = "idle" | "running" | "error" | "completed" | "paused";
+export interface Task {
+  arrangementId: number; // 1-based index for execution order
+  name: string; // e.g., 'buildDocs'
+  status?: Status;
+  payload?: any; // optional task-specific data
+  execute: () => Promise<void>; // The actual work to be done for the task
+}
+
+export interface WorkerMeta {
+  status: Status;
+  capabilities: string[];
+  tasks?: Task[];
+}
+
+export interface PreRunSequence {
+  workerId: string;
+  sequence: string[]; // e.g., ["would run: buildDocs", "would run: emitBadges"]
+}
+
+export interface WorkerStatus {
+  currentTask?: string | undefined;
+  progress?: number;
+  lastMilestone?: string | undefined;
+  isIdle: boolean;
+}
+
+export interface WorkerManager {
+  /**
+   * Adds a new task to the manager, assigning it a unique arrangementId.
+   * @param task - A task object, without the arrangementId.
+   * @returns The full Task object with its new arrangementId, or null if the name is a duplicate.
+   */
+  addTask(task: Omit<Task, "arrangementId">): Task | null;
+
+  /**
+   * Updates an existing task's properties.
+   * @param taskName - The name of the task to update.
+   * @param updates - The properties to update (e.g., payload, execute function).
+   */
+  updateTask(
+    taskName: string,
+    updates: Partial<Omit<Task, "arrangementId" | "name">>
+  ): void;
+
+  /**
+   * Generates SynchronikWorker instances for all managed tasks.
+   * @returns An array of SynchronikWorker instances ready to be registered with the core manager.
+   */
+  generateWorkers(): SynchronikWorker[];
+
+  /**
+   * Simulates the execution flow of pending tasks.
+   * @returns A string describing the ordered sequence of tasks.
+   */
+  simulateRun(): string;
+
+  // Gets the current status of a worker by its ID
+  getWorkerStatus(workerId: string): WorkerStatus | undefined;
+}
+
 export type RunMode = "parallel" | "sequential" | "batched" | "isolated";
 
 export interface SynchronikUnit {
@@ -5,7 +66,7 @@ export interface SynchronikUnit {
   name: string;
   description?: string;
   enabled: boolean;
-  status?: "idle" | "running" | "error" | "completed" | "paused";
+  status?: Status;
   lastRun?: Date;
 
   /**
@@ -27,7 +88,7 @@ export interface SynchronikWorker extends SynchronikUnit {
   intervalMs?: number;
   timeoutMs?: number;
   maxRetries?: number;
-  task?: string;
+  task?: string | undefined;
   processId?: string;
 }
 
