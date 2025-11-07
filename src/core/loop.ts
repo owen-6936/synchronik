@@ -13,7 +13,7 @@ export function createSynchronikLoop(
     worker: SynchronikWorker,
     processId: string
   ): Promise<void> {
-    if (worker.status === "paused") return;
+    if (worker.status === "paused" || worker.status === "completed") return;
 
     tracker.setStatus(worker.id, "running");
 
@@ -36,10 +36,18 @@ export function createSynchronikLoop(
         return;
       } catch (err) {
         if (attempt === retries) {
-          tracker.setStatus(worker.id, "error", {
-            emitMilestone: true,
-            payload: { processId, error: String(err), attempt },
-          });
+          try {
+            tracker.setStatus(worker.id, "error", {
+              emitMilestone: true,
+              payload: {
+                processId,
+                error: String((err as Error).message),
+                attempt,
+              },
+            });
+          } catch (trackerError) {
+            console.error("Tracker failed to set error status:", trackerError);
+          }
         }
       }
     }
@@ -56,9 +64,13 @@ export function createSynchronikLoop(
 
         await Promise.all(
           process.workers.map((worker) => {
-            // Treat worker as paused if parent process is paused
-            if (worker.status === "paused" || process.status === "paused")
+            if (
+              worker.status === "paused" ||
+              worker.status === "completed" ||
+              process.status === "paused"
+            ) {
               return;
+            }
 
             return runWorker(worker, process.id);
           })

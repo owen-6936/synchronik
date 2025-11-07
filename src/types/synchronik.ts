@@ -119,6 +119,7 @@ export interface StatusTracker {
       payload?: Record<string, unknown>;
     }
   ) => void;
+  getStatus: (unitId: string) => SynchronikUnit["status"];
 }
 
 export interface SynchronikLoop {
@@ -145,4 +146,12 @@ export interface SynchronikManager {
   stopAll: () => void;
   runUnitById: (id: string) => Promise<void>;
   runProcessById: (id: string) => Promise<void>;
+}
+
+export interface SynchronikDashboard {
+  render: () => void;
+  attachToManager: (manager: SynchronikManager) => void;
+  showUnitStatus: (unitId: string) => void;
+  showMilestoneArc: (unitId: string) => void;
+  triggerBadgeGlow: (unitId: string, badge: string) => void;
 }

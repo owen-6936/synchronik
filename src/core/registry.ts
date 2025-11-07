@@ -20,6 +20,11 @@ export function createSynchronikRegistry(): SynchronikRegistry {
 
       if ("workers" in unit) {
         processes.set(unit.id, unit as SynchronikProcess);
+
+        for (const worker of (unit as SynchronikProcess).workers) {
+          units.set(worker.id, worker);
+          workers.set(worker.id, worker);
+        }
       }
     },
 
@@ -59,11 +64,20 @@ export function createSynchronikRegistry(): SynchronikRegistry {
     },
 
     releaseUnit(id) {
+      const unit = units.get(id);
+      if (!unit) return;
+
       units.delete(id);
       workers.delete(id);
       processes.delete(id);
-    },
 
+      if ("workers" in unit) {
+        for (const worker of (unit as SynchronikProcess).workers) {
+          units.delete(worker.id);
+          workers.delete(worker.id);
+        }
+      }
+    },
     getWorkersForProcess(processId) {
       const process = processes.get(processId);
       return process?.workers ?? [];

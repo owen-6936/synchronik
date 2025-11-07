@@ -1,6 +1,10 @@
 import { EventEmitter } from "stream";
 import type { MilestoneEmitter, SynchronikEvent } from "../types/synchronik.js";
 
+/**
+ * A central event bus for the Synchronik engine, built on Node.js's EventEmitter.
+ * It handles the emission and subscription of core lifecycle events.
+ */
 export class SynchronikEventBus {
   private emitter = new EventEmitter();
 
@@ -12,8 +16,14 @@ export class SynchronikEventBus {
     type: T,
     listener: (event: Extract<SynchronikEvent, { type: T }>) => void
   ): () => void {
-    this.emitter.on(type, listener);
-    return () => this.emitter.off(type, listener);
+    const wrapped = (event: SynchronikEvent) => {
+      if (event.type === type) {
+        listener(event as Extract<SynchronikEvent, { type: T }>);
+      }
+    };
+
+    this.emitter.on(type, wrapped);
+    return () => this.emitter.off(type, wrapped);
   }
 
   subscribeAll(listener: (event: SynchronikEvent) => void): () => void {
