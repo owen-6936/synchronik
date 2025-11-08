@@ -4,7 +4,7 @@ export interface Task {
   name: string; // e.g., 'buildDocs'
   status?: Status;
   payload?: any; // optional task-specific data
-  execute: () => Promise<void>; // The actual work to be done for the task
+  execute: () => Promise<void | any>; // The actual work to be done for the task
 }
 
 export interface WorkerMeta {
@@ -44,6 +44,24 @@ export interface WorkerManager {
   ): void;
 
   /**
+   * Pauses a pending task. All tasks with a higher arrangementId will wait.
+   * @param taskName - The name of the task to pause.
+   */
+  pauseTask(taskName: string): void;
+
+  /**
+   * Resumes a paused task.
+   * @param taskName - The name of the task to resume.
+   */
+  resumeTask(taskName: string): void;
+
+  /**
+   * Cancels and removes a pending task from the queue.
+   * @param taskName - The name of the task to cancel.
+   */
+  cancelTask(taskName: string): void;
+
+  /**
    * Generates SynchronikWorker instances for all managed tasks.
    * @returns An array of SynchronikWorker instances ready to be registered with the core manager.
    */
@@ -54,6 +72,18 @@ export interface WorkerManager {
    * @returns A string describing the ordered sequence of tasks.
    */
   simulateRun(): string;
+
+  /**
+   * Starts the worker manager's internal loop for assigning tasks to workers.
+   * This must be called for tasks to be processed.
+   */
+  start(): void;
+
+  /**
+   * Stops the worker manager's internal loop.
+   * Pending tasks will remain in the queue but will not be processed until `start()` is called again.
+   */
+  stop(): void;
 
   // Gets the current status of a worker by its ID
   getWorkerStatus(workerId: string): WorkerStatus | undefined;
@@ -220,6 +250,12 @@ export interface SynchronikManager {
   stopAll: () => void;
   runWorkerById: (workerId: string) => Promise<void>;
   runProcessById: (id: string) => Promise<void>;
+
+  /**
+   * Creates and integrates a worker pool manager.
+   * @param poolSize - The number of concurrent workers in the pool.
+   */
+  useWorkerPool: (poolSize?: number) => WorkerManager;
 }
 
 export interface SynchronikDashboard {
