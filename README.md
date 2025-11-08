@@ -1,4 +1,3 @@
-<!-- omit in toc -->
 <div align="center">
   <h1>
     Synchronik ✨
@@ -11,8 +10,9 @@
 [![Node.js Version](https://img.shields.io/badge/Node.js-20+-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strongly%20Typed-blue)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-green)](LICENSE)
-
----
+[![CI](https://github.com/owen-6936/synchronik/actions/workflows/ci.yml/badge.svg)](https://github.com/owen-6936/synchronik/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/owen-6936/synchronik/actions/workflows/codeql.yml/badge.svg)](https://github.com/owen-6936/synchronik/actions/workflows/codeql.yml)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/owen-6936/synchronik/publish.yml?branch=release/v1.0.0)](https://github.com/owen-6936/synchronik/actions/workflows/publish.yml)
 
 ## 📖 Overview
 
