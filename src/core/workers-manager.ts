@@ -18,6 +18,7 @@ export class SynchronikWorkerManager implements WorkerManager {
   private activeWorkers = new Map<string, SynchronikWorker>();
   private arrangementCounter = 1;
   private loopInterval: NodeJS.Timeout | null = null;
+  private executor: (workerId: string) => Promise<void> = async () => {};
 
   constructor(poolSize: number = 2) {
     for (let i = 0; i < poolSize; i++) {
@@ -32,6 +33,18 @@ export class SynchronikWorkerManager implements WorkerManager {
       this.idleWorkers.push(worker);
       this.activeWorkers.set(workerId, worker); // Keep track of all workers
     }
+  }
+
+  /**
+   * Injects the execution function from the core manager.
+   * @param executor - The function to run a worker by its ID.
+   */
+  setExecutor(executor: (workerId: string) => Promise<void>): void {
+    this.executor = executor;
+  }
+
+  getPoolWorkers(): SynchronikWorker[] {
+    return Array.from(this.activeWorkers.values());
   }
 
   /**
@@ -75,6 +88,46 @@ export class SynchronikWorkerManager implements WorkerManager {
   }
 
   /**
+   * Pauses a pending task. All tasks with a higher arrangementId will wait.
+   * @param {string} taskName - The name of the task to pause.
+   */
+  pauseTask(taskName: string): void {
+    const task = this.pendingTasks.find((t) => t.name === taskName);
+    if (task && task.status === "idle") {
+      task.status = "paused";
+    } else {
+      console.warn(`Cannot pause: Task "${taskName}" is not pending or idle.`);
+    }
+  }
+
+  /**
+   * Resumes a paused task.
+   * @param {string} taskName - The name of the task to resume.
+   */
+  resumeTask(taskName: string): void {
+    const task = this.pendingTasks.find((t) => t.name === taskName);
+    if (task && task.status === "paused") {
+      task.status = "idle";
+    } else {
+      console.warn(`Cannot resume: Task "${taskName}" is not paused.`);
+    }
+  }
+
+  /**
+   * Cancels and removes a pending task from the queue.
+   * @param {string} taskName - The name of the task to cancel.
+   */
+  cancelTask(taskName: string): void {
+    const initialLength = this.pendingTasks.length;
+    this.pendingTasks = this.pendingTasks.filter((t) => t.name !== taskName);
+    if (this.pendingTasks.length === initialLength) {
+      console.warn(
+        `Cannot cancel: Task "${taskName}" not found in pending queue.`
+      );
+    }
+  }
+
+  /**
    * Starts the worker manager's loop to assign tasks to idle workers.
    */
   start(): void {
@@ -82,6 +135,11 @@ export class SynchronikWorkerManager implements WorkerManager {
 
     this.loopInterval = setInterval(() => {
       if (this.pendingTasks.length > 0 && this.idleWorkers.length > 0) {
+        // Implement cascading pause: if the highest priority task is paused, wait.
+        if (this.pendingTasks[0] && this.pendingTasks[0].status === "paused") {
+          return;
+        }
+
         const task = this.pendingTasks.shift(); // Get the highest priority task
         const worker = this.idleWorkers.shift(); // Get an idle worker
 
@@ -122,21 +180,16 @@ export class SynchronikWorkerManager implements WorkerManager {
     worker.status = "running";
     worker.task = task.name;
     task.status = "running";
+    // The worker's run function is temporarily replaced with the task's execute logic.
+    worker.run = task.execute;
 
-    try {
-      await task.execute();
-      task.status = "completed";
-    } catch (error) {
-      task.status = "error";
-      console.error(
-        `Task "${task.name}" failed on worker ${worker.id}:`,
-        error
-      );
-    } finally {
-      worker.status = "idle";
-      worker.task = undefined;
-      this.idleWorkers.push(worker); // Return worker to the idle pool
-    }
+    // Use the core manager's executor.
+    await this.executor(worker.id);
+
+    // The core manager will handle status updates, so we just return the worker to the pool.
+    worker.status = "idle";
+    worker.task = undefined;
+    this.idleWorkers.push(worker);
   }
 
   getWorkerStatus(workerId: string): WorkerStatus | undefined {

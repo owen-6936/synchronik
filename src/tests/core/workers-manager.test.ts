@@ -1,12 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { SynchronikWorkerManager } from "../../core/workers-manager.js";
+import { createSynchronikManager } from "../../core/manager.js";
+import type { WorkerManager } from "../../types/synchronik.js";
+import { SynchronikWorkerManager } from "../../core/workers-manager.js"; // Import the concrete class
 
 describe("SynchronikWorkerManager", () => {
-  let workerManager: SynchronikWorkerManager;
+  let manager: ReturnType<typeof createSynchronikManager>;
+  let workerManager: WorkerManager;
 
   beforeEach(() => {
-    // Use a pool of 2 workers for most tests
-    workerManager = new SynchronikWorkerManager(2);
+    // Create the core manager first
+    manager = createSynchronikManager();
+    // Then, create the worker pool manager from it
+    workerManager = manager.useWorkerPool(2);
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
@@ -47,6 +52,71 @@ describe("SynchronikWorkerManager", () => {
     );
   });
 
+  describe("Task Lifecycle: Pause, Resume, Cancel", () => {
+    it("should pause a pending task", () => {
+      const task = workerManager.addTask({
+        name: "Task 1",
+        execute: async () => {},
+      });
+      workerManager.pauseTask("Task 1");
+      expect(task?.status).toBe("paused");
+    });
+
+    it("should resume a paused task", () => {
+      const task = workerManager.addTask({
+        name: "Task 1",
+        execute: async () => {},
+      });
+      workerManager.pauseTask("Task 1");
+      expect(task?.status).toBe("paused");
+      workerManager.resumeTask("Task 1");
+      expect(task?.status).toBe("idle");
+    });
+
+    it("should cancel and remove a pending task", () => {
+      workerManager.addTask({ name: "Task 1", execute: async () => {} });
+      workerManager.addTask({ name: "Task 2", execute: async () => {} });
+      workerManager.cancelTask("Task 1");
+      expect(workerManager.simulateRun()).toBe("Execution sequence: 1. Task 2");
+    });
+
+    it("should enforce cascading pause", async () => {
+      const results: string[] = [];
+      workerManager.addTask({
+        name: "Task 1",
+        execute: async () => results.push("Task 1 done"),
+      });
+      workerManager.addTask({
+        name: "Task 2",
+        execute: async () => results.push("Task 2 done"),
+      });
+
+      // Pause the first task, which should block the second
+      workerManager.pauseTask("Task 1");
+      workerManager.start();
+
+      // Wait a moment to ensure Task 2 doesn't run
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(results).toEqual([]);
+
+      // Resume the first task, allowing the queue to proceed
+      workerManager.resumeTask("Task 1");
+
+      // Wait for all tasks to complete
+      await new Promise<void>((resolve) => {
+        const interval = setInterval(() => {
+          if (results.length === 2) {
+            clearInterval(interval);
+            workerManager.stop();
+            resolve();
+          }
+        }, 50);
+      });
+
+      expect(results).toEqual(["Task 1 done", "Task 2 done"]);
+    });
+  });
+
   describe("simulateRun", () => {
     it("should return a message when no tasks are pending", () => {
       expect(workerManager.simulateRun()).toBe(
@@ -74,18 +144,21 @@ describe("SynchronikWorkerManager", () => {
 
       // Manually add a task and re-sort to simulate an update
       const step2 = {
-        name: "Step 2",
+        // This task will get arrangementId 3 if added normally
+        name: "Step 2 (Inserted)",
         execute: async () => {},
         arrangementId: 1.5,
         status: "idle" as const,
       };
-      workerManager["pendingTasks"].push(step2);
-      workerManager["pendingTasks"].sort(
+      // Cast workerManager to its concrete type to access private members for testing
+      (workerManager as SynchronikWorkerManager)["pendingTasks"].push(step2);
+      (workerManager as SynchronikWorkerManager)["pendingTasks"].sort(
         (a, b) => a.arrangementId - b.arrangementId
       );
 
+      // The expected output needs to reflect the inserted task's name
       expect(workerManager.simulateRun()).toBe(
-        "Execution sequence: 1. Step 1, 2. Step 2, 3. Step 3"
+        "Execution sequence: 1. Step 1, 2. Step 2 (Inserted), 3. Step 3"
       );
     });
   });
@@ -93,8 +166,8 @@ describe("SynchronikWorkerManager", () => {
   it("should process tasks from the queue with idle workers", async () => {
     const results: number[] = [];
     const taskCount = 5;
-    const poolSize = 2;
-    workerManager = new SynchronikWorkerManager(poolSize);
+    // Re-initialize for this specific test's pool size
+    workerManager = manager.useWorkerPool(2);
 
     // Add 5 tasks
     for (let i = 1; i <= taskCount; i++) {
@@ -110,15 +183,15 @@ describe("SynchronikWorkerManager", () => {
       });
     }
 
-    // Start the manager's loop
-    workerManager.start();
+    // Start the main manager, which now also starts the worker manager's loop
+    manager.start();
 
     // Wait for all tasks to be completed
     await new Promise<void>((resolve) => {
       const interval = setInterval(() => {
         if (results.length === taskCount) {
           clearInterval(interval);
-          workerManager.stop();
+          manager.stop();
           resolve();
         }
       }, 50);

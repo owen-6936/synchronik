@@ -8,6 +8,7 @@ export { createSynchronikManager } from "./core/manager.js";
 export { createSynchronikDashboard } from "./core/dashboard.js";
 
 export type {
+  Task,
   SynchronikManager,
   SynchronikUnit,
   SynchronikWorker,

@@ -2,12 +2,14 @@ import type {
   SynchronikEvent,
   SynchronikManager,
   SynchronikUnit,
+  WorkerManager,
 } from "../types/synchronik.js";
 import { createMilestoneEmitter, SynchronikEventBus } from "./event.js";
 import { createSynchronikLifecycle } from "./lifecycle.js";
 import { createSynchronikLoop } from "./loop.js";
 import { createSynchronikRegistry } from "./registry.js";
 import { createStatusTracker } from "./status-tracker.js";
+import { SynchronikWorkerManager } from "./workers-manager.js";
 import { createSynchronikVisualizer } from "./visualizer.js";
 import { createUnitWatcher } from "./watcher.js";
 
@@ -47,7 +49,7 @@ export function createSynchronikManager(): SynchronikManager {
   let loopInterval: NodeJS.Timeout | null = null;
   let watcherInterval: NodeJS.Timeout | null = null;
 
-  return {
+  const managerApi: SynchronikManager = {
     /**
      * Starts the Synchronik engine's background processes.
      * This includes the main execution loop and the unit watcher.
@@ -242,5 +244,32 @@ export function createSynchronikManager(): SynchronikManager {
         handler(event.milestoneId, event.payload);
       });
     },
+
+    /**
+     * Creates and integrates a worker pool manager.
+     * @param {number} [poolSize=5] - The number of concurrent workers in the pool.
+     * @returns {WorkerManager} An API to manage the worker pool.
+     */
+    useWorkerPool(poolSize: number = 5): WorkerManager {
+      const workerManager = new SynchronikWorkerManager(poolSize);
+
+      // Integrate the two: The WorkerManager will use the core Manager to execute tasks.
+      workerManager.setExecutor(this.runWorkerById);
+
+      // Register the pool workers with the core manager so they are visible.
+      const poolWorkers = workerManager.getPoolWorkers();
+      poolWorkers.forEach((worker) => this.registerUnit(worker));
+
+      // Start the worker manager's loop when the core manager starts.
+      const originalStart = this.start;
+      this.start = () => {
+        originalStart();
+        workerManager.start();
+      };
+
+      return workerManager;
+    },
   };
+
+  return managerApi;
 }

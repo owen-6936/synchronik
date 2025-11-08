@@ -1,53 +1,92 @@
 {
-  "name": "popflix-synchron",
-  "version": "1.0.0",
-  "description": "Synchronik is a modular orchestration engine for contributor clarity and cognitive celebration. It transforms manual workflows into milestone-driven automation, letting your code coordinate tasks while you reclaim flow. With schema-aware batch handling, real-time overlays, and teachable subsystems.",
-  "homepage": "https://github.com/owen-6936/popflix-synchron#readme",
-  "bugs": {
-    "url": "https://github.com/owen-6936/popflix-synchron/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/owen-6936/popflix-synchron.git"
-  },
-  "license": "Apache-2.0",
-  "author": "Owen Erhabor",
-  "type": "module",
-  "main": "dist/synchronizer.js",
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "test": "vitest run --cache --include 'src/tests/**/*.test.ts'",
-    "test:watch": "vitest --watch --cache",
-    "prebuild": "rm -rf dist && tsc --noEmit",
-    "build": "swc src -d dist --strip-leading-paths --copy-files && tsc -p tsconfig.build.json",
-    "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
-    "type-check": "tsc --noEmit",
-    "docs":"typedoc"
-  },
-  "dependencies": {
-    "axios": "^1.7.2",
-    "dotenv": "^17.2.3",
-    "express": "^4.21.2",
-    "mysql2": "^3.15.3",
-    "node-fetch": "^3.3.2",
-    "socket.io": "^4.8.1",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
-  },
-  "devDependencies": {
-    "@swc/cli": "^0.7.8",
-    "@swc/core": "^1.15.0",
-    "@types/express": "^4.17.21",
-    "@types/jest": "^30.0.0",
-    "@types/node": "^24.10.0",
-    "@types/node-fetch": "^2.6.13",
-    "@vitejs/plugin-react": "^5.1.0",
-    "jsdom": "^27.1.0",
-    "socket.io-client": "^4.7.5",
-    "typedoc": "^0.28.14",
-    "vitest": "^4.0.7"
-  }
+    "name": "synchronik",
+    "version": "1.0.0",
+    "description": "A modular orchestration engine for building resilient, milestone-driven workflows in Node.js.",
+    "homepage": "https://github.com/owen-6936/synchronik#readme",
+    "bugs": {
+        "url": "https://github.com/owen-6936/synchronik/issues"
+    },
+    "keywords": [
+        "orchestration",
+        "workflow",
+        "engine",
+        "task management",
+        "worker pool",
+        "concurrency",
+        "parallelism",
+        "automation",
+        "nodejs",
+        "typescript",
+        "event-driven",
+        "resilience"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/owen-6936/synchronik.git"
+    },
+    "license": "MIT",
+    "author": "Owen Erhabor",
+    "type": "module",
+    "main": "dist/synchronizer.js",
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        ".": {
+            "import": {
+                "types": "./dist/index.d.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "types": "./dist/index.d.cts",
+                "default": "./dist/index.cjs"
+            }
+        }
+    },
+    "scripts": {
+        "test": "vitest run --cache",
+        "test:watch": "vitest --watch --cache",
+        "prebuild": "rm -rf dist && tsc --noEmit && eslint . --ext .ts --cache && vitest run",
+        "start": "node dist/index.js",
+        "dev": "ts-node src/index.ts",
+        "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+        "lint": "eslint . --ext .ts --cache --fix",
+        "typecheck": "tsc --noEmit",
+        "format": "prettier --write --cache .",
+        "docs": "typedoc"
+    },
+    "dependencies": {
+        "axios": "^1.7.2",
+        "dotenv": "^17.2.3",
+        "express": "^4.21.2",
+        "mysql2": "^3.15.3",
+        "node-fetch": "^3.3.2",
+        "socket.io": "^4.8.1",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.9.3"
+    },
+    "devDependencies": {
+        "@swc/cli": "^0.7.8",
+        "@swc/core": "^1.15.0",
+        "@types/express": "^4.17.21",
+        "@types/jest": "^30.0.0",
+        "@types/node": "^24.10.0",
+        "@types/node-fetch": "^2.6.13",
+        "@vitejs/plugin-react": "^5.1.0",
+        "jsdom": "^27.1.0",
+        "socket.io-client": "^4.7.5",
+        "typedoc": "^0.28.14",
+        "vitest": "^4.0.7",
+        "@eslint/js": "^9.35.0",
+        "@types/papaparse": "^5.3.16",
+        "@typescript-eslint/eslint-plugin": "^8.46.1",
+        "@typescript-eslint/parser": "^8.46.1",
+        "eslint": "^9.38.0",
+        "eslint-plugin-import": "^2.32.0",
+        "eslint-plugin-prettier": "^5.5.4",
+        "eslint-plugin-vitest": "^0.5.4",
+        "typescript-eslint": "^8.44.0",
+        "prettier": "^3.6.2",
+        "tsup": "^8.5.0"
+    }
 }

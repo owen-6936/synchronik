@@ -1,30 +1,30 @@
 {
-  "compilerOptions": {
-    // --- Project Structure ---
-    "rootDir": "./src", // Source files will be in a 'src' directory
-    "outDir": "./dist", // Compiled JavaScript will go to 'dist'
+    "compilerOptions": {
+        // --- Project Structure ---
+        "rootDir": "./src", // Source files will be in a 'src' directory
+        "outDir": "./dist", // Compiled JavaScript will go to 'dist'
 
-    // --- Target and Module System ---
-    "target": "ES2022", // Target a modern stable version of JavaScript
-    "module": "NodeNext", // Use Node's native module resolution (ESM)
-    "moduleResolution": "NodeNext", // Crucial for modern Node.js module loading
+        // --- Target and Module System ---
+        "target": "ES2022", // Target a modern stable version of JavaScript
+        "module": "NodeNext", // Use Node's native module resolution (ESM)
+        "moduleResolution": "NodeNext", // Crucial for modern Node.js module loading
 
-    // --- Type Checking and Strictness ---
-    "strict": true, // Enable all strict mode type-checking options (Highly Recommended)
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "skipLibCheck": true,
+        // --- Type Checking and Strictness ---
+        "strict": true, // Enable all strict mode type-checking options (Highly Recommended)
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+        "skipLibCheck": true,
 
-    // --- Build & Output Options ---
-    "sourceMap": true, // Generate source maps for easier debugging
-    "declaration": true, // Generate .d.ts files for strong typing
-    "declarationMap": true, // Generate source maps for .d.ts files
+        // --- Build & Output Options ---
+        "sourceMap": true, // Generate source maps for easier debugging
+        "declaration": true, // Generate .d.ts files for strong typing
+        "declarationMap": true, // Generate source maps for .d.ts files
 
-    // --- Isolation and Interop ---
-    "verbatimModuleSyntax": true, // Enforces consistent import/export styles
-    "isolatedModules": true, // Required for use with tools like SWC or Babel
-    "esModuleInterop": true // Enables compatibility with CommonJS imports
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "**/*.test.ts"]
+        // --- Isolation and Interop ---
+        "verbatimModuleSyntax": true, // Enforces consistent import/export styles
+        "isolatedModules": true, // Required for use with tools like SWC or Babel
+        "esModuleInterop": true // Enables compatibility with CommonJS imports
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["node_modules", "**/*.test.ts"]
 }
