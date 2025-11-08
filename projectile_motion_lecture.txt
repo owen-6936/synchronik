@@ -17,4 +17,4 @@ Step 6: Calculating Horizontal Range
 Step 7: Generating Lecture Notes File
 --- Execution Stats ---
 Run Mode: sequential
-Total Duration: 2ms
+Total Duration: 5ms

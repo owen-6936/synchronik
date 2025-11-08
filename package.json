@@ -44,7 +44,7 @@
         }
     },
     "scripts": {
-        "test": "vitest run --cache --include 'src/tests/**/*.test.ts'",
+        "test": "vitest run --cache",
         "test:watch": "vitest --watch --cache",
         "prebuild": "rm -rf dist && tsc --noEmit && eslint . --ext .ts --cache && vitest run",
         "start": "node dist/index.js",
