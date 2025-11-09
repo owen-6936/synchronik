@@ -4,3 +4,6 @@ node_modules
 
 pnpm-lock.yaml
 pnpm-workspace.yaml
+
+.eslintcache
+projectile_motion_lecture.txt
