@@ -1,97 +1,57 @@
 import type { SynchronikRegistry } from "../types/registry.js";
-import type {
-  StatusTracker,
-  SynchronikLoop,
-  SynchronikWorker,
-} from "../types/synchronik.js";
+import type { StatusTracker, SynchronikLoop } from "../types/synchronik.js";
+import {
+    executeWorkersByRunMode,
+    executeWorkerWithRetry,
+} from "../utils/run-mode.js";
 
+/**
+ * Creates the main execution loop for the Synchronik engine.
+ * This loop runs periodically, identifies idle units, and executes them.
+ *
+ * @param registry The central unit registry.
+ * @param tracker The status tracker for updating unit statuses.
+ * @returns A `SynchronikLoop` instance.
+ */
 export function createSynchronikLoop(
-  registry: SynchronikRegistry,
-  tracker: StatusTracker
+    registry: SynchronikRegistry,
+    tracker: StatusTracker
 ): SynchronikLoop {
-  async function runWorker(
-    worker: SynchronikWorker,
-    processId: string
-  ): Promise<void> {
-    if (worker.status === "paused" || worker.status === "completed") return;
+    return {
+        async run() {
+            const processes = registry.listProcesses();
 
-    tracker.setStatus(worker.id, "running");
+            for (const process of processes) {
+                if (process.status === "paused") continue;
 
-    const retries = worker.maxRetries ?? 0;
-    const timeoutMs = worker.timeoutMs ?? 10000;
+                tracker.setStatus(process.id, "running");
 
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        await Promise.race([
-          worker.run(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Timeout")), timeoutMs)
-          ),
-        ]);
+                const workers = process.workers.filter(
+                    (w) =>
+                        w.enabled &&
+                        w.status !== "completed" &&
+                        w.status !== "paused"
+                );
 
-        tracker.setStatus(worker.id, "completed", {
-          emitMilestone: true,
-          payload: { processId, attempt },
-        });
-        return;
-      } catch (err) {
-        if (attempt === retries) {
-          try {
-            tracker.setStatus(worker.id, "error", {
-              emitMilestone: true,
-              payload: {
-                processId,
-                error: String((err as Error).message),
-                attempt,
-              },
-            });
-          } catch (trackerError) {
-            console.error("Tracker failed to set error status:", trackerError);
-          }
-        }
-      }
-    }
-  }
+                tracker.setStatus(process.id, "running", {
+                    emitMilestone: true,
+                    payload: { runMode: process.runMode ?? "sequential" },
+                });
 
-  return {
-    async run() {
-      const processes = registry.listProcesses();
+                await executeWorkersByRunMode({
+                    workers,
+                    process,
+                    execute: (worker) =>
+                        executeWorkerWithRetry(worker, tracker, {
+                            processId: process.id,
+                        }),
+                });
 
-      for (const process of processes) {
-        if (process.status === "paused") continue;
-
-        tracker.setStatus(process.id, "running");
-
-        const workers = process.workers.filter(
-          (w) => w.enabled && w.status !== "completed" && w.status !== "paused"
-        );
-
-        const runMode = process.runMode ?? "sequential";
-
-        tracker.setStatus(process.id, "running", {
-          emitMilestone: true,
-          payload: { runMode },
-        });
-
-        if (runMode === "parallel") {
-          await Promise.all(workers.map((w) => runWorker(w, process.id)));
-        } else if (runMode === "isolated") {
-          for (const worker of workers) {
-            await runWorker(worker, process.id);
-            await new Promise((r) => setTimeout(r, 100)); // small delay for clarity
-          }
-        } else {
-          // default: sequential
-          for (const worker of workers) {
-            await runWorker(worker, process.id);
-          }
-        }
-
-        tracker.setStatus(process.id, "completed", {
-          emitMilestone: true,
-          payload: { runMode },
-        });
-      }
-    },
-  };
+                tracker.setStatus(process.id, "completed", {
+                    emitMilestone: true,
+                    payload: { runMode: process.runMode ?? "sequential" },
+                });
+            }
+        },
+    };
 }

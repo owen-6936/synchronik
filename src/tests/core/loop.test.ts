@@ -7,191 +7,196 @@ import { createSynchronikLifecycle } from "../../core/lifecycle";
 import { SynchronikUnit } from "../../types/synchronik";
 
 describe("SynchronikLoop", () => {
-  let registry: ReturnType<typeof createSynchronikRegistry>;
-  let tracker: ReturnType<typeof createStatusTracker>;
-  let loop: ReturnType<typeof createSynchronikLoop>;
+    let registry: ReturnType<typeof createSynchronikRegistry>;
+    let tracker: ReturnType<typeof createStatusTracker>;
+    let loop: ReturnType<typeof createSynchronikLoop>;
 
-  const mockWorker = (
-    id: string,
-    status: "idle" | "paused" | "completed" = "idle"
-  ) => ({
-    id,
-    status,
-    run: vi.fn().mockResolvedValue(undefined),
-    name: "Mock Worker",
-    enabled: true,
-  });
+    const mockWorker = (
+        id: string,
+        status: "idle" | "paused" | "completed" = "idle"
+    ) => ({
+        id,
+        status,
+        run: vi.fn().mockResolvedValue(undefined),
+        name: "Mock Worker",
+        enabled: true,
+    });
 
-  const mockProcess = (
-    id: string,
-    workerIds: string[],
-    status: "idle" | "paused" = "idle"
-  ) => ({
-    id,
-    status,
-    workers: workerIds.map((wid) => mockWorker(wid)),
-    name: "Mock Process",
-    enabled: true,
-    runMode: "sequential" as SynchronikUnit["runMode"],
-  });
+    const mockProcess = (
+        id: string,
+        workerIds: string[],
+        status: "idle" | "paused" = "idle"
+    ) => ({
+        id,
+        status,
+        workers: workerIds.map((wid) => mockWorker(wid)),
+        name: "Mock Process",
+        enabled: true,
+        runMode: "sequential" as SynchronikUnit["runMode"],
+    });
 
-  beforeEach(() => {
-    registry = createSynchronikRegistry();
-    const eventBus = new SynchronikEventBus();
-    const milestoneEmitter = createMilestoneEmitter(eventBus);
-    const lifecycle = createSynchronikLifecycle(
-      registry,
-      eventBus,
-      milestoneEmitter
-    );
-    tracker = createStatusTracker(lifecycle);
-    loop = createSynchronikLoop(registry, tracker);
-  });
+    beforeEach(() => {
+        registry = createSynchronikRegistry();
+        const eventBus = new SynchronikEventBus();
+        const milestoneEmitter = createMilestoneEmitter(eventBus);
+        const lifecycle = createSynchronikLifecycle(
+            registry,
+            eventBus,
+            milestoneEmitter
+        );
+        tracker = createStatusTracker(lifecycle);
+        loop = createSynchronikLoop(registry, tracker);
 
-  it("runs idle workers and updates status", async () => {
-    const p = mockProcess("p1", ["w1", "w2"]);
-    registry.registerUnit(p);
-    p.workers.forEach((w) => registry.registerUnit(w));
+        // Prevent unhandled error exceptions by adding a dummy listener for the 'error' event.
+        eventBus.subscribe("error", () => {});
+    });
 
-    await loop.run();
+    it("runs idle workers and updates status", async () => {
+        const p = mockProcess("p1", ["w1", "w2"]);
+        registry.registerUnit(p);
+        p.workers.forEach((w) => registry.registerUnit(w));
 
-    for (const w of p.workers) {
-      expect(w.run).toHaveBeenCalled();
-      expect(tracker.getStatus(w.id)).toBe("completed");
-    }
-  });
+        await loop.run();
 
-  it("skips paused workers", async () => {
-    const p = mockProcess("p2", ["w3", "w4"]);
-    p.workers[0].status = "paused";
-    registry.registerUnit(p);
-    p.workers.forEach((w) => registry.registerUnit(w));
+        for (const w of p.workers) {
+            expect(w.run).toHaveBeenCalled();
+            expect(tracker.getStatus(w.id)).toBe("completed");
+        }
+    });
 
-    await loop.run();
+    it("skips paused workers", async () => {
+        const p = mockProcess("p2", ["w3", "w4"]);
+        p.workers[0].status = "paused";
+        registry.registerUnit(p);
+        p.workers.forEach((w) => registry.registerUnit(w));
 
-    expect(p.workers[0].run).not.toHaveBeenCalled();
-    expect(p.workers[1].run).toHaveBeenCalled();
-  });
+        await loop.run();
 
-  it("skips paused processes entirely", async () => {
-    const p = mockProcess("p3", ["w5", "w6"], "paused");
-    registry.registerUnit(p);
-    p.workers.forEach((w) => registry.registerUnit(w));
+        expect(p.workers[0].run).not.toHaveBeenCalled();
+        expect(p.workers[1].run).toHaveBeenCalled();
+    });
 
-    await loop.run();
+    it("skips paused processes entirely", async () => {
+        const p = mockProcess("p3", ["w5", "w6"], "paused");
+        registry.registerUnit(p);
+        p.workers.forEach((w) => registry.registerUnit(w));
 
-    for (const w of p.workers) {
-      expect(w.run).not.toHaveBeenCalled();
-    }
-  });
+        await loop.run();
 
-  it("handles worker errors and updates status", async () => {
-    const failingWorker = {
-      id: "w7",
-      status: "idle" as const,
-      run: vi.fn().mockRejectedValue(new Error("fail")),
-      name: "Failing Worker",
-      enabled: true,
-    };
-    const p = {
-      id: "p4",
-      status: "idle" as const,
-      workers: [failingWorker],
-      name: "Mock Process",
-      enabled: true,
-    };
+        for (const w of p.workers) {
+            expect(w.run).not.toHaveBeenCalled();
+        }
+    });
 
-    registry.registerUnit(p);
-    registry.registerUnit(failingWorker);
+    it("handles worker errors and updates status", async () => {
+        const failingWorker = {
+            id: "w7",
+            status: "idle" as const,
+            run: vi.fn().mockRejectedValue(new Error("fail")),
+            name: "Failing Worker",
+            enabled: true,
+        };
+        const p = {
+            id: "p4",
+            status: "idle" as const,
+            workers: [failingWorker],
+            name: "Mock Process",
+            enabled: true,
+        };
 
-    await loop.run();
+        registry.registerUnit(p);
+        registry.registerUnit(failingWorker);
 
-    expect(tracker.getStatus("w7")).toBe("error");
-  });
+        await loop.run();
 
-  it("does not run workers already marked completed", async () => {
-    const w = mockWorker("w8");
-    w.status = "completed";
-    const p = {
-      id: "p5",
-      status: "idle" as const,
-      workers: [w],
-      name: "Mock Process",
-      enabled: true,
-    };
+        expect(tracker.getStatus("w7")).toBe("error");
+    });
 
-    registry.registerUnit(p);
-    registry.registerUnit(w);
+    it("does not run workers already marked completed", async () => {
+        const w = mockWorker("w8");
+        w.status = "completed";
+        const p = {
+            id: "p5",
+            status: "idle" as const,
+            workers: [w],
+            name: "Mock Process",
+            enabled: true,
+        };
 
-    await loop.run();
+        registry.registerUnit(p);
+        registry.registerUnit(w);
 
-    expect(w.run).not.toHaveBeenCalled();
-  });
+        await loop.run();
 
-  it("runs workers in parallel when runMode is 'parallel'", async () => {
-    const p = mockProcess("p6", ["w9", "w10"]);
-    p.runMode = "parallel";
-    registry.registerUnit(p);
-    p.workers.forEach((w) => registry.registerUnit(w));
+        expect(w.run).not.toHaveBeenCalled();
+    });
 
-    const start = Date.now();
-    await loop.run();
-    const duration = Date.now() - start;
+    it("runs workers in parallel when runMode is 'parallel'", async () => {
+        const p = mockProcess("p6", ["w9", "w10"]);
+        p.runMode = "parallel";
+        registry.registerUnit(p);
+        p.workers.forEach((w) => registry.registerUnit(w));
 
-    // Parallel should be fast (no sequential delay)
-    expect(duration).toBeLessThan(50);
+        const start = Date.now();
+        await loop.run();
+        const duration = Date.now() - start;
 
-    for (const w of p.workers) {
-      expect(w.run).toHaveBeenCalled();
-      expect(tracker.getStatus(w.id)).toBe("completed");
-    }
-  });
+        // Parallel should be fast (no sequential delay)
+        expect(duration).toBeLessThan(50);
 
-  it("runs workers sequentially with delay when runMode is 'isolated'", async () => {
-    const p = mockProcess("p7", ["w11", "w12"]);
-    p.runMode = "isolated";
-    registry.registerUnit(p);
-    p.workers.forEach((w) => registry.registerUnit(w));
+        for (const w of p.workers) {
+            expect(w.run).toHaveBeenCalled();
+            expect(tracker.getStatus(w.id)).toBe("completed");
+        }
+    });
 
-    const start = Date.now();
-    await loop.run();
-    const duration = Date.now() - start;
+    it("runs workers sequentially with delay when runMode is 'isolated'", async () => {
+        const p = mockProcess("p7", ["w11", "w12"]);
+        p.runMode = "isolated";
+        registry.registerUnit(p);
+        p.workers.forEach((w) => registry.registerUnit(w));
 
-    // Isolated should take longer due to delay
-    expect(duration).toBeGreaterThanOrEqual(100);
+        const start = Date.now();
+        await loop.run();
+        const duration = Date.now() - start;
 
-    for (const w of p.workers) {
-      expect(w.run).toHaveBeenCalled();
-      expect(tracker.getStatus(w.id)).toBe("completed");
-    }
-  });
+        // Isolated should take longer due to delay
+        expect(duration).toBeGreaterThanOrEqual(100);
 
-  it("emits milestone with runMode in payload", async () => {
-    const eventBus = new SynchronikEventBus();
-    const milestoneEmitter = createMilestoneEmitter(eventBus);
-    const lifecycle = createSynchronikLifecycle(
-      registry,
-      eventBus,
-      milestoneEmitter
-    );
-    tracker = createStatusTracker(lifecycle);
-    loop = createSynchronikLoop(registry, tracker);
+        for (const w of p.workers) {
+            expect(w.run).toHaveBeenCalled();
+            expect(tracker.getStatus(w.id)).toBe("completed");
+        }
+    });
 
-    const milestoneSpy = vi.fn();
-    eventBus.subscribe("milestone", milestoneSpy);
+    it("emits milestone with runMode in payload", async () => {
+        const eventBus = new SynchronikEventBus();
+        const milestoneEmitter = createMilestoneEmitter(eventBus);
+        const lifecycle = createSynchronikLifecycle(
+            registry,
+            eventBus,
+            milestoneEmitter
+        );
+        tracker = createStatusTracker(lifecycle);
+        loop = createSynchronikLoop(registry, tracker);
 
-    const p = mockProcess("p8", ["w13"]);
-    p.runMode = "parallel";
-    registry.registerUnit(p);
-    p.workers.forEach((w) => registry.registerUnit(w));
+        const milestoneSpy = vi.fn();
+        eventBus.subscribe("milestone", milestoneSpy);
 
-    await loop.run();
+        const p = mockProcess("p8", ["w13"]);
+        p.runMode = "parallel";
+        registry.registerUnit(p);
+        p.workers.forEach((w) => registry.registerUnit(w));
 
-    const milestonePayloads = milestoneSpy.mock.calls.map(([e]) => e.payload);
-    const hasRunMode = milestonePayloads.some(
-      (payload) => payload?.runMode === "parallel"
-    );
+        await loop.run();
 
-    expect(hasRunMode).toBe(true);
-  });
+        const milestonePayloads = milestoneSpy.mock.calls.map(
+            ([e]) => e.payload
+        );
+        const hasRunMode = milestonePayloads.some(
+            (payload) => payload?.runMode === "parallel"
+        );
+
+        expect(hasRunMode).toBe(true);
+    });
 });
