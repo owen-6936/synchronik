@@ -1,6 +1,6 @@
-import type { SynchronikRegistry } from "../types/registry.js";
 import type {
     SynchronikProcess,
+    SynchronikRegistry,
     SynchronikUnit,
     SynchronikWorker,
 } from "../types/synchronik.js";
@@ -98,6 +98,21 @@ export function createSynchronikRegistry(): SynchronikRegistry {
             // Optional: update worker/process maps if needed
             if ("run" in unit) workers.set(id, unit as SynchronikWorker);
             if ("workers" in unit) processes.set(id, unit as SynchronikProcess);
+        },
+
+        updateWorkerConfig(workerId, config) {
+            const worker = workers.get(workerId);
+            if (!worker) return;
+
+            Object.assign(worker, config);
+            workers.set(workerId, worker);
+        },
+        updateProcessConfig(processId, config) {
+            const process = processes.get(processId);
+            if (!process) return;
+
+            Object.assign(process, config);
+            processes.set(processId, process);
         },
 
         releaseUnit(id) {

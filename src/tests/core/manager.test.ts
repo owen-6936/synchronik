@@ -78,6 +78,7 @@ describe("SynchronikManager", () => {
         manager.registerUnit(w1);
         manager.registerUnit(w2);
 
+        manager.start();
         const p = {
             id: "p-stop",
             status: "idle" as const,
@@ -86,6 +87,7 @@ describe("SynchronikManager", () => {
             enabled: true,
         };
         manager.registerUnit(p);
+        await manager.runProcessById("p-stop");
 
         await manager.stop();
 
@@ -359,7 +361,7 @@ describe("SynchronikManager", () => {
         expect(manager.getUnitStatus("dynamic-retry-worker")).toBe("error");
 
         // 2. Dynamically update the worker's configuration to allow retries.
-        manager.updateUnitConfig("dynamic-retry-worker", { maxRetries: 1 });
+        manager.updateWorkerConfig("dynamic-retry-worker", { maxRetries: 1 });
 
         // 3. Reset the worker's status to 'idle' so it can be run again.
         manager.updateStatus("dynamic-retry-worker", "idle");

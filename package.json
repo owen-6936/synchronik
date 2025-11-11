@@ -1,6 +1,6 @@
 {
     "name": "synchronik",
-    "version": "1.1.0",
+    "version": "1.2.1",
     "description": "A modular orchestration engine for building resilient, milestone-driven workflows in Node.js.",
     "homepage": "https://github.com/owen-6936/synchronik#readme",
     "bugs": {
@@ -53,7 +53,14 @@
         "lint": "eslint . --ext .ts --cache --fix",
         "typecheck": "tsc --noEmit",
         "format": "prettier --write --cache .",
-        "docs": "typedoc"
+        "docs": "typedoc",
+        "example:basic": "tsx examples/1-basic-worker.ts",
+        "example:advancedv1": "tsx examples/2-advanced-process.ts",
+        "example:advancedv2": "tsx examples/3-showcase-physics.ts",
+        "example:advancedv3": "tsx examples/4-resilient-scraper.ts",
+        "example:advancedv4": "tsx examples/5-multi-stage-pipeline.ts",
+        "example:advancedv5": "tsx examples/6-health-monitor.ts",
+        "example:advancedv6": "tsx examples/7-dynamic-health-monitor.ts"
     },
     "dependencies": {
         "axios": "^1.7.2",
@@ -62,31 +69,31 @@
         "mysql2": "^3.15.3",
         "node-fetch": "^3.3.2",
         "socket.io": "^4.8.1",
-        "ts-node": "^10.9.2",
+        "tsx": "^4.20.6",
         "typescript": "^5.9.3"
     },
     "devDependencies": {
+        "@eslint/js": "^9.35.0",
         "@swc/cli": "^0.7.8",
         "@swc/core": "^1.15.0",
         "@types/express": "^4.17.21",
         "@types/jest": "^30.0.0",
         "@types/node": "^24.10.0",
         "@types/node-fetch": "^2.6.13",
-        "@vitejs/plugin-react": "^5.1.0",
-        "jsdom": "^27.1.0",
-        "socket.io-client": "^4.7.5",
-        "typedoc": "^0.28.14",
-        "vitest": "^4.0.7",
-        "@eslint/js": "^9.35.0",
         "@types/papaparse": "^5.3.16",
         "@typescript-eslint/eslint-plugin": "^8.46.1",
         "@typescript-eslint/parser": "^8.46.1",
+        "@vitejs/plugin-react": "^5.1.0",
         "eslint": "^9.38.0",
         "eslint-plugin-import": "^2.32.0",
         "eslint-plugin-prettier": "^5.5.4",
         "eslint-plugin-vitest": "^0.5.4",
-        "typescript-eslint": "^8.44.0",
+        "jsdom": "^27.1.0",
         "prettier": "^3.6.2",
-        "tsup": "^8.5.0"
+        "socket.io-client": "^4.7.5",
+        "tsup": "^8.5.0",
+        "typedoc": "^0.28.14",
+        "typescript-eslint": "^8.44.0",
+        "vitest": "^4.0.7"
     }
 }

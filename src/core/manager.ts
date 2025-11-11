@@ -21,8 +21,14 @@ import {
  * Creates and initializes a new SynchronikManager instance.
  * This is the main entry point for creating and controlling the orchestration engine.
  * @returns A `SynchronikManager` instance with a full API for managing workflows.
+ * @param options Configuration options for the manager.
+ * @param options.loopInterval The interval in milliseconds at which the main execution loop runs. @default 1000
+ * @param options.watcherInterval The interval in milliseconds at which the unit watcher runs. @default 60000
  */
-export function createSynchronikManager(): SynchronikManager {
+export function createSynchronikManager(options?: {
+    loopInterval?: number;
+    watcherInterval?: number;
+}): SynchronikManager {
     /**
 
      * ----------------------------------------------------------------
@@ -30,6 +36,8 @@ export function createSynchronikManager(): SynchronikManager {
      * ----------------------------------------------------------------
      * All core modules of the Synchronik engine are instantiated here.
      */
+    const loopIntervalMs = options?.loopInterval ?? 1000;
+    const watcherIntervalMs = options?.watcherInterval ?? 60 * 1000;
     const registry = createSynchronikRegistry();
     const eventBus = new SynchronikEventBus();
     const milestoneEmitter = createMilestoneEmitter(eventBus);
@@ -61,11 +69,20 @@ export function createSynchronikManager(): SynchronikManager {
     let watcherInterval: NodeJS.Timeout | null = null;
 
     const managerApi: SynchronikManager = {
+        /**
+         * Starts the engine's background processes, including the main execution loop and the unit watcher.
+         */
         start() {
-            loopInterval = setInterval(() => loop.run(), 60 * 1000);
-            watcherInterval = setInterval(() => watcher.scan(), 60 * 1000);
+            loopInterval = setInterval(() => loop.run(), loopIntervalMs);
+            watcherInterval = setInterval(
+                () => watcher.scan(),
+                watcherIntervalMs
+            );
         },
 
+        /**
+         * Gracefully stops the engine. It clears the background intervals and attempts to complete any in-progress work before exiting.
+         */
         async stop() {
             if (loopInterval) clearInterval(loopInterval);
             if (watcherInterval) clearInterval(watcherInterval);
@@ -78,7 +95,12 @@ export function createSynchronikManager(): SynchronikManager {
                 tracker.setStatus(process.id, "running");
 
                 for (const worker of process.workers) {
-                    if (worker.status === "paused") continue;
+                    if (
+                        worker.status === "paused" ||
+                        !worker.enabled ||
+                        worker.status === "idle"
+                    )
+                        continue;
 
                     tracker.setStatus(worker.id, "running");
 
@@ -101,6 +123,9 @@ export function createSynchronikManager(): SynchronikManager {
             }
         },
 
+        /**
+         * Sets all registered units to an 'idle' status, effectively enabling them for execution.
+         */
         startAll() {
             for (const unit of registry.listUnits()) {
                 if (unit.status === "paused") {
@@ -109,6 +134,9 @@ export function createSynchronikManager(): SynchronikManager {
             }
         },
 
+        /**
+         * Sets all registered units to a 'paused' status, preventing them from being executed.
+         */
         stopAll() {
             for (const unit of registry.listUnits()) {
                 lifecycle.update(unit.id, { status: "paused" });
@@ -116,6 +144,10 @@ export function createSynchronikManager(): SynchronikManager {
         },
 
         async runWorkerById(id) {
+            /**
+             * Executes a single worker by its ID.
+             * @param id The ID of the worker to run.
+             */
             const worker = registry.getWorkerById(id);
             if (!worker) {
                 return;
@@ -123,7 +155,12 @@ export function createSynchronikManager(): SynchronikManager {
 
             await executeWorkerWithRetry(worker, tracker);
         },
+
         async runProcessById(id) {
+            /**
+             * Executes a process and all of its associated workers according to its `runMode`.
+             * @param id The ID of the process to run.
+             */
             const process = registry.getProcessById(id);
             if (!process || process.status === "paused") return;
 
@@ -132,17 +169,35 @@ export function createSynchronikManager(): SynchronikManager {
                 payload: { runMode: process.runMode ?? "sequential" },
             });
 
-            const workers = process.workers.filter(
-                (w) =>
-                    w.enabled &&
-                    w.status !== "paused" &&
-                    w.status !== "completed"
-            );
+            const workers = process.workers.filter((w) => w.enabled);
 
             await executeWorkersByRunMode({
                 workers,
                 process,
-                execute: (worker) => this.runWorkerById(worker.id),
+                execute: async (worker) => {
+                    await executeWorkerWithRetry(worker, tracker, {
+                        processId: process.id,
+                    });
+
+                    // After the manual run, handle the run count and disable if maxRuns is reached.
+                    if (worker.status === "completed") {
+                        const runCount = (worker.meta?.runCount ?? 0) + 1;
+                        registry.updateUnitState(worker.id, {
+                            meta: { ...worker.meta, runCount },
+                        });
+                        if (worker.maxRuns && runCount >= worker.maxRuns) {
+                            lifecycle.update(worker.id, { enabled: false });
+                        } else if (worker.runOnInterval) {
+                            // CRITICAL FIX: For interval workers that just completed a manual run,
+                            // clear their lastRun timestamp. This makes them immediately eligible
+                            // for the interval loop on its next tick, without waiting for the full intervalMs
+                            // from the manual run's completion.
+                            registry.updateUnitState(worker.id, {
+                                lastRun: undefined as any,
+                            });
+                        }
+                    }
+                },
             });
 
             tracker.setStatus(id, "completed", {
@@ -151,6 +206,26 @@ export function createSynchronikManager(): SynchronikManager {
             });
         },
 
+        /**
+         * Disables a specific unit, preventing it from being executed.
+         * @param id The ID of the unit to disable.
+         */
+        disableUnit(id) {
+            lifecycle.update(id, { enabled: false });
+        },
+
+        /**
+         * Enables a specific unit, allowing it to be executed.
+         * @param id The ID of the unit to enable.
+         */
+        enableUnit(id) {
+            lifecycle.update(id, { enabled: true });
+        },
+
+        /**
+         * Retrieves the current status of a unit (e.g., 'idle', 'running').
+         * @param id The ID of the unit.
+         */
         getUnitStatus(id: string): SynchronikUnit["status"] | undefined {
             const unit = registry.getUnitById(id);
             return unit?.status;
@@ -160,6 +235,11 @@ export function createSynchronikManager(): SynchronikManager {
             return registry.listUnits();
         },
 
+        /**
+         * Emits a custom milestone event.
+         * @param id A unique identifier for the milestone.
+         * @param payload Optional data to include with the milestone.
+         */
         emitMilestone(id: string, payload?: Record<string, unknown>) {
             milestoneEmitter.emit(id, payload);
         },
@@ -172,8 +252,20 @@ export function createSynchronikManager(): SynchronikManager {
 
         // --- Direct Lifecycle, Registry, and Tracker Access ---
 
+        /**
+         * Registers a new unit with the engine.
+         * @param unit The unit to register.
+         */
         registerUnit: lifecycle.register,
+        /**
+         * Stops a specific worker by setting its `enabled` flag to `false`.
+         * @param workerId The ID of the worker to stop.
+         */
+        stopWorkerById: (workerId: string) =>
+            lifecycle.update(workerId, { enabled: false }),
+        /** Releases a unit from the engine, removing it from the registry. */
         releaseUnit: lifecycle.release,
+        /** Manually sets the status of a unit. */
         updateStatus: tracker.setStatus,
 
         getRegistrySnapshot() {
@@ -190,7 +282,10 @@ export function createSynchronikManager(): SynchronikManager {
             const workerManager = new SynchronikWorkerManager(poolSize);
 
             // Integrate the two: The WorkerManager will use the core Manager to execute tasks.
-            workerManager.setExecutor(this.runWorkerById);
+            workerManager.setExecutor(this.runWorkerById, {
+                registerUnit: this.registerUnit,
+                releaseUnit: this.releaseUnit,
+            });
 
             // Register the pool workers with the core manager so they are visible.
             const poolWorkers = workerManager.getPoolWorkers();
@@ -206,8 +301,11 @@ export function createSynchronikManager(): SynchronikManager {
             return workerManager;
         },
 
-        updateUnitConfig(unitId, config) {
-            registry.updateUnitState(unitId, config);
+        updateWorkerConfig(workerId, config) {
+            registry.updateWorkerConfig(workerId, config);
+        },
+        updateProcessConfig(processId, config) {
+            registry.updateProcessConfig(processId, config);
         },
     };
 

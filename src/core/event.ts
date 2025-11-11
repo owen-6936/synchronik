@@ -1,4 +1,4 @@
-import { EventEmitter } from "stream";
+import { EventEmitter } from "events";
 import type { MilestoneEmitter, SynchronikEvent } from "../types/synchronik.js";
 
 /**
