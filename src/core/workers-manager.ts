@@ -20,6 +20,10 @@ export class SynchronikWorkerManager implements WorkerManager {
     private arrangementCounter = 1;
     private loopInterval: NodeJS.Timeout | null = null;
     private executor: (workerId: string) => Promise<void> = async () => {};
+    private mainManager: {
+        registerUnit: (unit: SynchronikWorker) => void;
+        releaseUnit: (id: string) => void;
+    } | null = null;
 
     constructor(poolSize: number = 2) {
         for (let i = 0; i < poolSize; i++) {
@@ -40,8 +44,15 @@ export class SynchronikWorkerManager implements WorkerManager {
      * Injects the execution function from the core manager.
      * @param executor - The function to run a worker by its ID.
      */
-    setExecutor(executor: (workerId: string) => Promise<void>): void {
+    setExecutor(
+        executor: (workerId: string) => Promise<void>,
+        mainManager: {
+            registerUnit: (unit: SynchronikWorker) => void;
+            releaseUnit: (id: string) => void;
+        }
+    ): void {
         this.executor = executor;
+        this.mainManager = mainManager;
     }
 
     getPoolWorkers(): SynchronikWorker[] {
@@ -182,6 +193,54 @@ export class SynchronikWorkerManager implements WorkerManager {
             .join(", ");
 
         return `Execution sequence: ${sequence}`;
+    }
+
+    /**
+     * Dynamically adjusts the number of workers in the pool.
+     * @param newSize The target number of workers for the pool.
+     */
+    resize(newSize: number): void {
+        const currentSize = this.activeWorkers.size;
+
+        if (newSize > currentSize) {
+            // Scale up: Add new workers
+            for (let i = currentSize; i < newSize; i++) {
+                const workerId = `pool-worker-${i + 1}`;
+                const worker: SynchronikWorker = {
+                    id: workerId,
+                    name: `Pool Worker ${i + 1}`,
+                    enabled: true,
+                    status: "idle",
+                    run: async () => {}, // Placeholder
+                };
+                this.idleWorkers.push(worker);
+                this.activeWorkers.set(workerId, worker);
+                this.mainManager?.registerUnit(worker);
+                console.log(
+                    `[Worker Pool] Scaled up. Added worker: ${workerId}`
+                );
+            }
+        } else if (newSize < currentSize) {
+            // Scale down: Remove idle workers
+            const workersToRemove = currentSize - newSize;
+            for (let i = 0; i < workersToRemove; i++) {
+                // Remove from the end of the idle list to avoid disrupting active tasks
+                const workerToRemove = this.idleWorkers.pop();
+                if (workerToRemove) {
+                    this.activeWorkers.delete(workerToRemove.id);
+                    this.mainManager?.releaseUnit(workerToRemove.id);
+                    console.log(
+                        `[Worker Pool] Scaled down. Removed worker: ${workerToRemove.id}`
+                    );
+                } else {
+                    // Not enough idle workers to remove immediately.
+                    console.warn(
+                        "[Worker Pool] Scale-down requested, but no idle workers are available to remove."
+                    );
+                    break; // Stop trying to remove more workers
+                }
+            }
+        }
     }
 
     private async executeTask(worker: SynchronikWorker, task: Task) {

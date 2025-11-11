@@ -1,6 +1,6 @@
 {
   "name": "@nexicore/synchronik",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Modular toolkit for parsing, validating, and converting structured datasets (CSV ↔ JSON) with reviewer clarity.",
   "exports": {
     ".": "./mod.ts"

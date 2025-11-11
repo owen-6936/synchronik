@@ -16,6 +16,16 @@ export interface WorkerTask<T = any> {
 export interface TaskRunnerOptions {
     maxRetries?: number | undefined;
     retryDelayMs?: number | ((attempt: number) => number) | undefined;
+    /**
+     * An optional callback that is invoked after each task (sub-task) completes.
+     * It receives an object containing the current progress.
+     * @param progress An object with `completed`, `total`, and `percentage`.
+     */
+    onProgress?: (progress: {
+        completed: number;
+        total: number;
+        percentage: number;
+    }) => void;
 }
 
 /**
@@ -50,6 +60,17 @@ export interface TaskRunnerConfig<TItem, TResult> extends TaskRunnerOptions {
      * @param item The item from the collection being processed.
      */
     execute: (item: TItem) => Promise<TResult>;
+
+    /**
+     * An optional callback that is invoked after each task (sub-task) completes.
+     * It receives an object containing the current progress.
+     * @param progress An object with `completed`, `total`, and `percentage`.
+     */
+    onProgress?: (progress: {
+        completed: number;
+        total: number;
+        percentage: number;
+    }) => void;
 
     /**
      * An optional function to generate a unique ID for each task, used for logging and results.
@@ -92,7 +113,11 @@ export async function runWorkerTasks<TResult>(
  */
 export async function runWorkerTasks<TItem, TResult>(
     configOrTasks: TaskRunnerConfig<TItem, TResult> | WorkerTask<TResult>[],
-    options: TaskRunnerOptions = {}
+    options: TaskRunnerOptions = {
+        maxRetries: 0,
+        retryDelayMs: 0,
+        onProgress: () => {},
+    }
 ): Promise<TaskRunnerResult<TResult>> {
     const successful: { id: string; result: TResult }[] = [];
     const failed: { id: string; error: string }[] = [];
@@ -141,6 +166,16 @@ export async function runWorkerTasks<TItem, TResult>(
         if (lastError) {
             failed.push({ id: task.id, error: lastError.message });
         }
+
+        // Report progress AFTER all retries for a task are complete.
+        if (runnerOptions.onProgress) {
+            runnerOptions.onProgress({
+                completed: successful.length + failed.length,
+                total: tasks.length,
+                percentage:
+                    ((successful.length + failed.length) / tasks.length) * 100,
+            });
+        }
     }
 
     const totalTasks = tasks.length;
@@ -182,6 +217,7 @@ function resolveTasksAndOptions<TItem, TResult>(
         runnerOptions: {
             maxRetries: config.maxRetries,
             retryDelayMs: config.retryDelayMs,
-        },
+            onProgress: config.onProgress as TaskRunnerOptions["onProgress"],
+        } as TaskRunnerOptions,
     };
 }

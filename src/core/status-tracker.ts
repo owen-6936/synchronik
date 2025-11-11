@@ -25,10 +25,15 @@ export function createStatusTracker(
         setStatus(unitId, status, options = {}) {
             if (status === undefined) return;
 
+            // Extract the error from the payload if present, to pass to lifecycle.
+            const error = options.payload?.error as Error | undefined;
+
             statusMap.set(unitId, status); // ✅ track locally
             lifecycle.update(unitId, {
                 status,
                 lastRun: new Date(),
+                // Pass the specific error object to the lifecycle manager.
+                error,
             });
 
             visualizer?.renderUnitStatus(unitId, status);

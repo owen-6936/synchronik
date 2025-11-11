@@ -5,6 +5,34 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.2.0] - 2025-11-11
+
+### ✨ Added (v1.2.0)
+
+- **`runOnInterval` for `SynchronikWorker`**: Added a boolean property `runOnInterval` to `SynchronikWorker`. When `true`, the worker is automatically executed by the engine's main loop based on its `intervalMs`. This provides explicit control over which workers participate in automatic scheduling.
+- **`maxRuns` for `SynchronikWorker`**: Introduced an optional `maxRuns` property to `SynchronikWorker` to specify the maximum number of times a worker should run before being automatically disabled. This count includes both manual and interval-based runs.
+- **`stopWorkerById` Method**: Added `manager.stopWorkerById(workerId)` to explicitly disable a worker at runtime.
+- **`disableUnit` and `enableUnit` Methods**: Added `manager.disableUnit(id)` and `manager.enableUnit(id)` for generic control over any unit's enabled state.
+- **`updateWorkerConfig` and `updateProcessConfig` Methods**: Introduced dedicated, type-safe methods for runtime configuration updates of workers and processes.
+- **Dynamic Worker Pool Resizing**: Added a `resize(newSize)` method to the `WorkerManager` to allow dynamic scaling of the worker pool at runtime.
+- **`onProgress` Callback for `runWorkerTasks`**: Added an optional `onProgress` callback to `runWorkerTasks` to provide real-time progress updates during sub-task execution.
+- **`meta` Property on `SynchronikUnit`**: Added a `meta` object to all units for storing arbitrary metadata, now used for `runCount`.
+
+### ♻️ Changed (v1.2.0)
+
+- **Improved Error Propagation**: Enhanced the error handling chain to ensure the original `Error` object from a failing worker is correctly propagated to the final `error` event, providing specific and actionable error messages.
+- **Refined Interval Loop Logic**: Reworked the core loop to correctly handle worker states. It now has two distinct phases: one for process-based execution and a new, separate phase for interval-based worker execution.
+- **Accurate `runCount` Incrementing**: Ensured the `runCount` metadata is consistently incremented for all worker executions, whether triggered manually or by the interval loop.
+- **Clean Handoff from Manual to Interval Runs**: Modified the manual `runProcessById` execution to correctly prepare interval-based workers for immediate scheduling by the loop, preventing timing conflicts.
+- **Consolidated Type Definitions**: Refactored `src/types/synchronik.ts` to remove duplicate interfaces and add comprehensive JSDoc for all public-facing types and methods.
+
+### 🐛 Fixed (v1.2.0)
+
+- Resolved a timing issue where interval-based workers would "miss" their first scheduled run after a manual trigger.
+- Fixed a `TypeError` where `manager.stopWorkerById` was not correctly exposed on the `SynchronikManager` interface.
+- Corrected the `onProgress` callback in `runWorkerTasks` to report progress accurately after all retries for a task are exhausted.
+- Fixed an issue where `maxRuns` was not being correctly applied due to an off-by-one error in run counting.
+
 ## [v1.1.0] - 2025-11-09
 
 ### ✨ Added (v1.1.0)

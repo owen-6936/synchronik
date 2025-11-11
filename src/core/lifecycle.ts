@@ -1,7 +1,7 @@
-import type { SynchronikRegistry } from "../types/registry.js";
 import type {
     MilestoneEmitter,
     SynchronikLifecycle,
+    SynchronikRegistry,
 } from "../types/synchronik.js";
 import type { SynchronikEventBus } from "./event.js";
 
@@ -38,14 +38,16 @@ export function createSynchronikLifecycle(
      * @param updates A partial object of properties to update.
      */
         update(id, updates) {
-            registry.updateUnitState(id, updates);
-            if (updates.status === "error") {
+            const { status, error, ...rest } = updates;
+            registry.updateUnitState(id, { status, error, ...rest });
+
+            if (status === "error") {
                 eventBus.emit({
                     type: "error",
                     unitId: id,
-                    error: new Error(`Unit ${id} entered error state`),
+                    error: error || new Error(`Unit ${id} entered error state`),
                 });
-            } else if (updates.status === "completed") {
+            } else if (status === "completed") {
                 eventBus.emit({
                     type: "complete",
                     unitId: id,

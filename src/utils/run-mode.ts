@@ -94,7 +94,7 @@ export async function executeWorkerWithRetry(
                     emitMilestone: true,
                     payload: {
                         processId: options?.processId,
-                        error: String((err as Error).message),
+                        error: err as Error,
                         attempt,
                     },
                 });

@@ -4,7 +4,13 @@
 /**
  * Represents the possible lifecycle statuses of any Synchronik unit.
  */
-export type Status = "idle" | "running" | "error" | "completed" | "paused";
+export type Status =
+    | "idle"
+    | "running"
+    | "error"
+    | "completed"
+    | "paused"
+    | undefined;
 
 /**
  * Represents a single task managed by the `WorkerManager`.
@@ -128,6 +134,18 @@ export interface WorkerManager {
      * @returns A `WorkerStatus` object or `undefined` if the worker is not found.
      */
     getWorkerStatus(workerId: string): WorkerStatus | undefined;
+
+    /**
+     * Retrieves an array of all worker instances currently in the pool.
+     * @returns An array of `SynchronikWorker` objects.
+     */
+    getPoolWorkers(): SynchronikWorker[];
+
+    /**
+     * Dynamically adjusts the number of workers in the pool.
+     * @param newSize The target number of workers for the pool.
+     */
+    resize(newSize: number): void;
 }
 
 /**
@@ -145,6 +163,12 @@ export interface SynchronikUnit {
     enabled: boolean;
     status?: Status;
     lastRun?: Date;
+    /**
+     * An object for storing arbitrary metadata about the unit.
+     * The engine uses this to store properties like `runCount`.
+     * @default {}
+     */
+    meta?: Record<string, any>;
 
     /**
      * Determines how workers within a process are executed.
@@ -154,6 +178,12 @@ export interface SynchronikUnit {
      * - `batched`: Workers run in concurrent groups of a configurable size. See `batchSize`.
      */
     runMode?: RunMode;
+
+    /**
+     * An optional field to store the last encountered error for the unit.
+     * This is typically set when the unit's status transitions to 'error'.
+     */
+    error?: Error | undefined;
 
     // 🎯 Event hooks
     /**
@@ -185,6 +215,17 @@ export interface SynchronikWorker extends SynchronikUnit {
     run: () => Promise<void>;
     /** The interval in milliseconds at which the worker should be run by the automatic loop. */
     intervalMs?: number;
+    /**
+     * If true, the worker will be automatically run by the engine's main loop on its schedule.
+     * If false or undefined, the worker will only run when manually triggered.
+     * @default false
+     */
+    runOnInterval?: boolean;
+    /**
+     * The maximum number of times the worker should run on its interval before being disabled.
+     * @default Infinity
+     */
+    maxRuns?: number;
     /** The maximum time in milliseconds that a single `run` attempt is allowed to take before it's considered a failure. @default 10000 */
     timeoutMs?: number;
     /** The maximum number of times to retry the `run` function upon failure. @default 0 */
@@ -224,6 +265,26 @@ export interface SynchronikProcess extends SynchronikUnit {
 }
 
 /**
+ * Updates the configuration of a registered unit at runtime.
+ * @param workerId The ID of the unit to update.
+ * @param config A partial object of the unit's properties to update.
+ */
+export type UpdateWorkerConfig<T extends SynchronikUnit> = (
+    workerId: string,
+    config: Partial<T>
+) => void;
+
+/**
+ * Updates the configuration of a registered process at runtime.
+ * @param processId The ID of the process to update.
+ * @param config A partial object of the process's properties to update
+ */
+export type UpdateProcessConfig<T extends SynchronikProcess> = (
+    processId: string,
+    config: Partial<T>
+) => void;
+
+/**
  * The primary public interface for interacting with the Synchronik engine.
  */
 export interface SynchronikManager {
@@ -235,6 +296,9 @@ export interface SynchronikManager {
     // Execution
     runWorkerById: (workerId: string) => Promise<void>;
     runProcessById: (processId: string) => Promise<void>;
+    stopWorkerById: (workerId: string) => void;
+    disableUnit: (id: string) => void;
+    enableUnit: (id: string) => void;
 
     // Status and querying
     getUnitStatus: (id: string) => SynchronikUnit["status"];
@@ -257,7 +321,105 @@ export interface SynchronikManager {
     start: () => void;
     /** Gracefully stops the engine's background processes. */
     stop: () => Promise<void>;
+
+    // Unit Management
+    releaseUnit: (id: string) => void;
+    updateStatus: StatusTracker["setStatus"];
+    getRegistrySnapshot: () => SynchronikUnit[];
+
+    /**
+     * Updates the configuration of a registered process at runtime.
+     * @param processId The ID of the process to update.
+     * @param config A partial object of the process's properties to update.
+     */
+    updateProcessConfig: UpdateProcessConfig<SynchronikProcess>;
+    /**
+     * Updates the configuration of a registered worker at runtime.
+     * @param workerId The ID of the worker to update.
+     * @param config A partial object of the worker's properties to update.
+     */
+    updateWorkerConfig: UpdateWorkerConfig<SynchronikWorker>;
+
+    /**
+     * Creates and integrates a worker pool manager.
+     * @param poolSize - The number of concurrent workers in the pool.
+     */
+    useWorkerPool: (poolSize?: number) => WorkerManager;
+
+    onMilestone: (
+        handler: (
+            milestoneId: string,
+            payload?: Record<string, unknown>
+        ) => void
+    ) => () => void;
 }
+
+/**
+ * An in-memory database that stores and manages the state of all registered units.
+ */
+export interface SynchronikRegistry {
+    /** Registers a new unit, adding it to the internal maps. */
+    registerUnit: (unit: SynchronikUnit) => void;
+    /** Retrieves a unit by its unique ID. */
+    getUnitById: (id: string) => SynchronikUnit | undefined;
+    /** Retrieves a worker by its unique ID. */
+    getWorkerById: (id: string) => SynchronikWorker | undefined;
+    /** Retrieves a process by its unique ID. */
+    getProcessById: (id: string) => SynchronikProcess | undefined;
+
+    /** Returns an array of all currently registered units. */
+    listUnits: () => SynchronikUnit[];
+    /** Returns an array of all currently registered workers. */
+    listWorkers: () => SynchronikWorker[];
+    /** Returns an array of all currently registered processes. */
+    listProcesses: () => SynchronikProcess[];
+
+    /**
+     * Merges a partial configuration into an existing unit's state.
+     * @param id The ID of the unit to update.
+     * @param updates A partial object of the unit's properties to update.
+     */
+    updateUnitState: <T extends SynchronikUnit>(
+        id: string,
+        updates: Partial<T>
+    ) => void;
+
+    /**
+     * Updates the configuration of a registered process at runtime.
+     * @param processId The ID of the process to update.
+     * @param config A partial object of the process's properties to update
+     */
+    updateProcessConfig: UpdateProcessConfig<SynchronikProcess>;
+    /**
+     * Updates the configuration of a registered unit at runtime.
+     * @param workerId The ID of the unit to update.
+     * @param config A partial object of the unit's properties to update.
+     */
+    updateWorkerConfig: UpdateWorkerConfig<SynchronikWorker>;
+
+    /** Removes a unit and its associations from the registry. */
+    releaseUnit: (id: string) => void;
+
+    /** Retrieves all workers associated with a specific process ID. */
+    getWorkersForProcess: (processId: string) => SynchronikWorker[];
+    /** Finds all processes that contain a specific worker ID. */
+    getProcessesForWorker: (workerId: string) => SynchronikProcess[];
+
+    /** Returns all units that currently have the specified status. */
+    findUnitsByStatus: (status: SynchronikUnit["status"]) => SynchronikUnit[];
+}
+
+/**
+ * Represents the internal state of the registry, containing maps of all units.
+ */
+export type RegistryState = {
+    /** A map of all units, keyed by their ID. */
+    units: Map<string, SynchronikUnit>;
+    /** A map of all processes, keyed by their ID. */
+    processes: Map<string, SynchronikProcess>;
+    /** A map of all workers, keyed by their ID. */
+    workers: Map<string, SynchronikWorker>;
+};
 
 /**
  * A union type representing all possible events emitted by the engine's event bus.
@@ -319,13 +481,13 @@ export interface SynchronikVisualizer {
      * @param eventBus The `SynchronikEventBus` instance.
      */
 
-    attachToEventBus: (eventBus: SynchronikEventBus) => void;
+    attachToEventBus: (eventBus: ISynchronikEventBus) => void;
 }
 
 /**
  * Represents a visualizer that can render the execution flow of tasks.
  */
-export interface SynchronikEventBus {
+export interface ISynchronikEventBus {
     emit: (event: SynchronikEvent) => void;
     subscribe: <T extends SynchronikEvent["type"]>(
         type: T,
@@ -348,7 +510,9 @@ export interface SynchronikLifecycle {
      */
     update: (
         id: string,
-        updates: Partial<Pick<SynchronikUnit, "status" | "lastRun" | "enabled">>
+        updates: Partial<
+            Pick<SynchronikUnit, "status" | "lastRun" | "enabled">
+        > & { error?: Error | undefined }
     ) => void;
     /**
      * Releases a unit from the engine, removing it from the registry.
@@ -390,45 +554,6 @@ export interface SynchronikLoop {
 export interface UnitWatcher {
     /** Scans all registered units and applies watcher logic (e.g., releasing stale units, unpausing). */
     scan: () => void;
-}
-
-/**
- * @export
- * @interface SynchronikManager
- * @typedef {SynchronikManager}
- */
-export interface SynchronikManager {
-    start: () => void;
-    stop: () => Promise<void>;
-    registerUnit: (unit: SynchronikUnit) => void;
-    releaseUnit: (id: string) => void;
-    updateStatus: StatusTracker["setStatus"];
-    getRegistrySnapshot: () => SynchronikUnit[];
-    onMilestone: (
-        handler: (
-            milestoneId: string,
-            payload?: Record<string, unknown>
-        ) => void
-    ) => () => void;
-
-    // 🔧 Manual control
-    startAll: () => void;
-    stopAll: () => void;
-    runWorkerById: (workerId: string) => Promise<void>;
-    runProcessById: (id: string) => Promise<void>;
-
-    /**
-     * Updates the configuration of a registered unit at runtime.
-     * @param unitId The ID of the unit to update.
-     * @param config A partial object of the unit's properties to update.
-     */
-    updateUnitConfig: (unitId: string, config: Partial<SynchronikUnit>) => void;
-
-    /**
-     * Creates and integrates a worker pool manager.
-     * @param poolSize - The number of concurrent workers in the pool.
-     */
-    useWorkerPool: (poolSize?: number) => WorkerManager;
 }
 
 /**
