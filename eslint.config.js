@@ -14,6 +14,7 @@ export default [
             "src/utils/logger.ts",
             "mod.ts",
             "**/*.test.ts",
+            "examples/*",
         ],
     },
     {

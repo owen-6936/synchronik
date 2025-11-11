@@ -1,5 +1,8 @@
-import type { SynchronikRegistry } from "../types/registry.js";
-import type { SynchronikLifecycle, UnitWatcher } from "../types/synchronik.js";
+import type {
+    SynchronikLifecycle,
+    UnitWatcher,
+    SynchronikRegistry,
+} from "../types/synchronik.js";
 
 /**
  * Creates a unit watcher to maintain engine health.

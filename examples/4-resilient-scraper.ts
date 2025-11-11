@@ -1,7 +1,7 @@
 import {
     createSynchronikManager,
-    type SynchronikProcess,
-    type SynchronikWorker,
+    SynchronikProcess,
+    SynchronikWorker,
     runWorkerTasks,
 } from "../src/index.js";
 

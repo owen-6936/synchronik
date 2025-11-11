@@ -3,7 +3,6 @@ import type {
     StatusTracker,
     SynchronikWorker,
 } from "../types/synchronik.js";
-import { runWorkerTasks } from "./task-runner.js";
 
 /**
  * Executes a list of workers based on the run mode specified in a process.

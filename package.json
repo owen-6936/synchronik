@@ -1,6 +1,6 @@
 {
     "name": "synchronik",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "A modular orchestration engine for building resilient, milestone-driven workflows in Node.js.",
     "homepage": "https://github.com/owen-6936/synchronik#readme",
     "bugs": {

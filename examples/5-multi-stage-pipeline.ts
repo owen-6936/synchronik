@@ -1,7 +1,7 @@
 import {
     createSynchronikManager,
-    type SynchronikProcess,
-    type SynchronikWorker,
+    SynchronikProcess,
+    SynchronikWorker,
 } from "../src/index.js";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,8 +1,4 @@
-import {
-    createSynchronikManager,
-    type SynchronikProcess,
-    type SynchronikWorker,
-} from "../src/index.js";
+import { createSynchronikManager, SynchronikWorker } from "../src/index.js";
 async function runBasicWorker() {
     const manager = createSynchronikManager({ loopInterval: 20 });
 
