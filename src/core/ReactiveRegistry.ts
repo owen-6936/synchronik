@@ -48,22 +48,25 @@ export class ReactiveRegistry implements SynchronikRegistry {
      * Retrieves a unit by its ID.
      * @param id The ID of the unit.
      */
-    getUnitById = (id: string) => this.units.get(id);
+    getUnitById = (id: string): SynchronikUnit | undefined =>
+        this.units.get(id);
     /**
      * Retrieves a worker by its ID.
      * @param id The ID of the worker.
      */
-    getWorkerById = (id: string) => this.workers.get(id);
+    getWorkerById = (id: string): SynchronikWorker | undefined =>
+        this.workers.get(id);
     /**
      * Retrieves a process by its ID.
      * @param id The ID of the process.
      */
-    getProcessById = (id: string) => this.processes.get(id);
+    getProcessById = (id: string): SynchronikProcess | undefined =>
+        this.processes.get(id);
     /**
      * Retrieves all workers associated with a given process.
      * @param processId The ID of the process.
      */
-    getWorkersForProcess = (processId: string) =>
+    getWorkersForProcess = (processId: string): SynchronikWorker[] =>
         this.getProcessById(processId)?.workers ?? [];
 
     /**
@@ -147,29 +150,34 @@ export class ReactiveRegistry implements SynchronikRegistry {
     /**
      * Lists all registered units.
      */
-    listUnits = () => Array.from(this.units.values());
+    listUnits = (): SynchronikUnit[] => Array.from(this.units.values());
     /**
      * Lists all registered workers.
      */
-    listWorkers = () => Array.from(this.workers.values());
+    listWorkers = (): SynchronikWorker[] => Array.from(this.workers.values());
     /**
      * Lists all registered processes.
      */
-    listProcesses = () => Array.from(this.processes.values());
+    listProcesses = (): SynchronikProcess[] =>
+        Array.from(this.processes.values());
     /**
      * Updates the configuration of a process.
      */
-    updateProcessConfig = (id: string, config: Partial<SynchronikProcess>) =>
-        this.updateUnitState(id, config);
+    updateProcessConfig = (
+        id: string,
+        config: Partial<SynchronikProcess>
+    ): void => this.updateUnitState(id, config);
     /**
      * Updates the configuration of a worker.
      */
-    updateWorkerConfig = (id: string, config: Partial<SynchronikWorker>) =>
-        this.updateUnitState(id, config);
+    updateWorkerConfig = (
+        id: string,
+        config: Partial<SynchronikWorker>
+    ): void => this.updateUnitState(id, config);
     /**
      * Removes a unit from the registry.
      */
-    releaseUnit = (id: string) => {
+    releaseUnit = (id: string): void => {
         this.units.delete(id);
         this.workers.delete(id);
         this.processes.delete(id);
