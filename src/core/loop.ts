@@ -1,5 +1,4 @@
 import type {
-    StatusTracker,
     SynchronikLoop,
     SynchronikRegistry,
     SynchronikWorker,
@@ -18,8 +17,7 @@ import {
  * @returns A `SynchronikLoop` instance.
  */
 export function createSynchronikLoop(
-    registry: SynchronikRegistry,
-    tracker: StatusTracker
+    registry: SynchronikRegistry
 ): SynchronikLoop {
     return {
         async run() {
@@ -37,21 +35,29 @@ export function createSynchronikLoop(
 
                 if (nonIntervalWorkers.length === 0) continue;
 
-                tracker.setStatus(process.id, "running", {
-                    emitMilestone: true,
-                    payload: { runMode: process.runMode ?? "sequential" },
+                registry.updateUnitState(process.id, {
+                    status: "running",
+                    runMode: process.runMode ?? "sequential",
                 });
 
                 await executeWorkersByRunMode({
                     workers: nonIntervalWorkers,
                     process,
-                    execute: (worker) =>
-                        executeWorkerWithRetry(worker, tracker, {
-                            processId: process.id,
-                        }),
+                    execute: async (worker) => {
+                        try {
+                            await executeWorkerWithRetry(worker, registry, {
+                                processId: process.id,
+                            });
+                        } catch {
+                            // Catch errors to prevent them from crashing the loop. The status is already set to 'error' inside executeWorkerWithRetry.
+                        }
+                    },
                 });
 
-                tracker.setStatus(process.id, "completed");
+                registry.updateUnitState(process.id, {
+                    status: "completed",
+                    runMode: process.runMode ?? "sequential",
+                });
             }
 
             // --- [EXTENSION] New Worker-driven execution for interval-based runs ---
@@ -66,12 +72,16 @@ export function createSynchronikLoop(
                 // This resets its state, making it ready for the run. The `executeWorkerWithRetry`
                 // function will then correctly transition it to 'running' and 'completed'.
                 if (worker.status !== "idle") {
-                    tracker.setStatus(worker.id, "idle");
+                    registry.updateUnitState(worker.id, { status: "idle" });
                 }
 
-                await executeWorkerWithRetry(worker, tracker, {
-                    processId: worker.processId ?? "",
-                });
+                try {
+                    await executeWorkerWithRetry(worker, registry, {
+                        processId: worker.processId ?? "",
+                    });
+                } catch {
+                    // Also catch errors for interval workers.
+                }
 
                 // After the run, if it's an interval worker that completed, handle its state.
                 if (worker.status === "completed") {

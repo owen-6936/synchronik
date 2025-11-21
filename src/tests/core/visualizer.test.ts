@@ -1,72 +1,64 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createStatusTracker } from "../../core/status-tracker";
-import type {
-  SynchronikVisualizer,
-  SynchronikLifecycle,
-} from "../../types/synchronik";
+import { createSynchronikVisualizer } from "../../core/visualizer";
+import { SynchronikEventBus } from "../../core/event";
+import type { SynchronikVisualizer } from "../../types/synchronik";
 
 describe("SynchronikVisualizer", () => {
-  let renderUnitStatus: SynchronikVisualizer["renderUnitStatus"];
-  let renderMilestone: SynchronikVisualizer["renderMilestone"];
-  let attachToEventBus: SynchronikVisualizer["attachToEventBus"];
-  let visualizer: SynchronikVisualizer;
-  let lifecycle: SynchronikLifecycle;
-  let tracker: ReturnType<typeof createStatusTracker>;
+    let visualizer: SynchronikVisualizer;
+    let eventBus: SynchronikEventBus;
 
-  beforeEach(() => {
-    renderUnitStatus = vi.fn();
-    renderMilestone = vi.fn();
-    attachToEventBus = vi.fn();
-
-    visualizer = {
-      renderUnitStatus,
-      renderMilestone,
-      attachToEventBus,
-    };
-
-    lifecycle = {
-      update: vi.fn(),
-      emitMilestone: vi.fn(),
-      release: vi.fn(),
-      register: vi.fn(),
-    };
-
-    tracker = createStatusTracker(lifecycle, visualizer);
-  });
-
-  it("calls renderUnitStatus on status update", () => {
-    tracker.setStatus("w1", "running");
-    expect(renderUnitStatus).toHaveBeenCalledWith("w1", "running");
-  });
-
-  it("calls renderMilestone when manually triggered", () => {
-    visualizer.renderMilestone("unit:w2:completed", { badge: "gold" });
-    expect(renderMilestone).toHaveBeenCalledWith("unit:w2:completed", {
-      badge: "gold",
-    });
-  });
-
-  it("calls attachToEventBus with correct bus", () => {
-    const mockBus = { subscribeAll: vi.fn() };
-    visualizer.attachToEventBus(mockBus as any);
-    expect(attachToEventBus).toHaveBeenCalledWith(mockBus);
-  });
-
-  it("handles milestone emission with visualizer", () => {
-    tracker.setStatus("w3", "completed", {
-      emitMilestone: true,
-      payload: { glow: true },
+    beforeEach(() => {
+        // Create a real visualizer and spy on its methods
+        visualizer = createSynchronikVisualizer();
+        vi.spyOn(visualizer, "renderUnitStatus");
+        vi.spyOn(visualizer, "renderMilestone");
+        // Create a real event bus to test the connection
+        eventBus = new SynchronikEventBus();
     });
 
-    expect(lifecycle.emitMilestone).toHaveBeenCalledWith("unit:w3:completed", {
-      glow: true,
-    });
-    expect(renderUnitStatus).toHaveBeenCalledWith("w3", "completed");
-  });
+    it("renders unit status updates on dedicated status events", () => {
+        visualizer.attachToEventBus(eventBus);
 
-  it("ignores undefined status updates", () => {
-    tracker.setStatus("w4", undefined as any);
-    expect(renderUnitStatus).not.toHaveBeenCalled();
-    expect(lifecycle.update).not.toHaveBeenCalled();
-  });
+        // The visualizer listens for specific 'start', 'complete', and 'error' events
+        eventBus.emit({ type: "start", unitId: "w1" });
+        eventBus.emit({ type: "complete", unitId: "w2" });
+        eventBus.emit({
+            type: "error",
+            unitId: "w3",
+            error: new Error("fail"),
+        });
+
+        expect(visualizer.renderUnitStatus).toHaveBeenCalledWith(
+            "w1",
+            "running"
+        );
+        expect(visualizer.renderUnitStatus).toHaveBeenCalledWith(
+            "w2",
+            "completed"
+        );
+        expect(visualizer.renderUnitStatus).toHaveBeenCalledWith("w3", "error");
+    });
+
+    it("renders milestone overlays", () => {
+        visualizer.attachToEventBus(eventBus);
+
+        eventBus.emit({
+            type: "milestone",
+            milestoneId: "process:p1:completed", // The full ID is passed
+            payload: { badge: "gold" },
+        });
+
+        expect(visualizer.renderMilestone).toHaveBeenCalledWith(
+            "process:p1:completed",
+            {
+                badge: "gold",
+            }
+        );
+    });
+    it("does not render a milestone for non-milestone events", () => {
+        visualizer.attachToEventBus(eventBus);
+        // Emitting a status event should not trigger a milestone render
+        eventBus.emit({ type: "start", unitId: "w1" });
+        expect(visualizer.renderMilestone).not.toHaveBeenCalled();
+    });
 });

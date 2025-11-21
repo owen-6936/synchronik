@@ -32,6 +32,7 @@ async function main() {
     const setInitialConditions: SynchronikWorker = {
         name: "Set Initial Conditions",
         id: "set-initial-conditions",
+        status: "idle",
         enabled: true,
         run: async () => {
             await addNote(
@@ -43,6 +44,7 @@ async function main() {
     const calculateVelocityComponents: SynchronikWorker = {
         name: "Calculate Velocity Components",
         enabled: true,
+        status: "idle",
         id: "calculate-velocity-components",
         run: async () => {
             const angleRadians =
@@ -62,6 +64,7 @@ async function main() {
     const calculateTimeToPeak: SynchronikWorker = {
         name: "Calculate Time to Peak",
         enabled: true,
+        status: "idle",
         id: "calculate-time-to-peak",
         run: async () => {
             calculatedValues.timeToPeak =
@@ -75,6 +78,7 @@ async function main() {
     const calculateMaxHeight: SynchronikWorker = {
         name: "Calculate Maximum Height",
         enabled: true,
+        status: "idle",
         id: "calculate-max-height",
         run: async () => {
             calculatedValues.maxHeight =
@@ -91,6 +95,7 @@ async function main() {
     const calculateTotalTimeOfFlight: SynchronikWorker = {
         name: "Calculate Total Time of Flight",
         enabled: true,
+        status: "idle",
         id: "calculate-total-time-of-flight",
         run: async () => {
             calculatedValues.totalTime = 2 * calculatedValues.timeToPeak;
@@ -103,6 +108,7 @@ async function main() {
     const calculateRange: SynchronikWorker = {
         name: "Calculate Range",
         enabled: true,
+        status: "idle",
         id: "calculate-range",
         run: async () => {
             calculatedValues.range =
@@ -116,6 +122,7 @@ async function main() {
     const generateFinalReport: SynchronikWorker = {
         name: "Generate Final Report",
         enabled: true,
+        status: "idle",
         id: "generate-final-report",
         run: async () => {
             lectureNotes += `\n**Conclusion:** The projectile reached a maximum height of ${calculatedValues.maxHeight.toFixed(
@@ -135,6 +142,7 @@ async function main() {
     const physicsLectureProcess: SynchronikProcess = {
         enabled: true,
         id: "physics-lecture-process",
+        status: "idle",
         name: "Projectile Motion Lecture",
         runMode: "sequential", // Each step depends on the previous one
         workers: [

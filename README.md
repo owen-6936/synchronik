@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/License-Apache--2.0-green)](LICENSE)
 [![CI](https://github.com/owen-6936/synchronik/actions/workflows/ci.yml/badge.svg)](https://github.com/owen-6936/synchronik/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/owen-6936/synchronik/actions/workflows/codeql.yml/badge.svg)](https://github.com/owen-6936/synchronik/actions/workflows/codeql.yml)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/owen-6936/synchronik/publish.yml?branch=release/v1.2.1)](https://github.com/owen-6936/synchronik/actions/workflows/publish.yml)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/owen-6936/synchronik/publish.yml?branch=release/v2.0.0)](https://github.com/owen-6936/synchronik/actions/workflows/publish.yml)
 [![JSR](https://jsr.io/badges/@nexicore/synchronik)](https://jsr.io/@nexicore/synchronik)
 ![npm version](https://img.shields.io/npm/v/synchronik)
 
@@ -31,6 +31,7 @@ Whether you're coordinating data pipelines, managing background jobs, or buildin
 * **Robust State Management:** Reliably track the status of every task (`idle`, `running`, `paused`, `completed`, `error`).
 * **Automatic & Manual Control:** Run tasks on a scheduled interval with the main execution loop or trigger them manually via the API.
 * **Extensible by Design:** Register your own asynchronous functions as **Workers** and group them into **Processes**.
+* **Dependency-Driven Workflows:** Define complex execution graphs where workers can depend on the successful completion (and results) of others.
 * **Resilience Built-In:** Includes a `Watcher` to detect and handle stale or stuck tasks, ensuring your engine remains healthy.
 * **Visualization Hooks:** The event bus makes it trivial to connect real-time dashboards and monitoring tools.
 
@@ -57,7 +58,7 @@ import { createSynchronikManager } from 'synchronik';
 const manager = createSynchronikManager();
 
 // 2. Define a worker (your business logic)
-const myWorker = {
+const myWorker: SynchronikWorker = {
   id: 'daily-report-worker',
   status: 'idle',
   run: async () => { 
@@ -72,10 +73,63 @@ manager.registerUnit(myWorker);
 
 // 4. Start the engine and manually run the worker
 manager.start();
-await manager.runUnitById('daily-report-worker');
+await manager.runWorkerById('daily-report-worker');
 
 // 5. Clean up
 await manager.stop();
+```
+
+---
+
+## ✨ Advanced Workflows with `dependsOn`
+
+The engine now supports the creation of complex workflows where workers can depend on the successful completion of other workers. This transforms Synchronik from a simple task runner into a true workflow orchestrator.
+
+### Basic Usage
+
+Define a simple dependency by adding a `dependsOn` array with the ID of the prerequisite worker. In this example, `worker-B` will only start after `worker-A` has successfully completed.
+
+```typescript
+const workerA = {
+  id: 'A-prepare-data',
+  name: 'Prepare Data',
+  run: async () => { /* ... */ }
+};
+
+const workerB = {
+  id: 'B-process-data',
+  name: 'Process Data',
+  run: async () => { /* ... */ },
+  dependsOn: ['A-prepare-data'] // Depends on worker A
+};
+```
+
+### Conditional Dependencies
+
+For dynamic workflows, you can define a dependency as an object that includes a `condition` function. This function receives the result from the parent worker and must return `true` for the dependency to be met.
+
+**Example:** Run `thorough-cleanup` only if the processed video was long.
+
+```typescript
+import type { SynchronikWorker, Dependency } from "./types/synchronik";
+
+// 1. The parent worker returns a result
+const ffmpegWorker: SynchronikWorker = {
+    id: 'ffmpeg-process',
+    run: async () => {
+        const duration = 125; // seconds
+        return { duration }; // This result is passed to the condition
+    }
+};
+
+// 2. The dependent worker defines a condition
+const thoroughCleanup: SynchronikWorker = {
+    id: 'thorough-cleanup',
+    dependsOn: [{
+        id: 'ffmpeg-process',
+        condition: (result) => result.duration >= 60
+    }]
+};
 ```
 
 ---
@@ -86,11 +140,10 @@ The Synchronik engine is built around a modular architecture orchestrated by a c
 
 | Component | File (`src/core/`) | Role |
 | :--- | :--- | :--- |
-| **Manager** | `manager.ts` | The main public interface. It integrates all other components and provides methods to control the engine's lifecycle and API. |
-| **Registry** | `registry.ts` | An in-memory database that stores the state and configuration of all registered units (workers and processes). |
-| **Lifecycle** | `lifecycle.ts` | Manages the registration, state updates, and release of units, ensuring state changes are valid. |
+| **Manager** | `manager.ts` | The main public interface. It integrates all other components and provides the high-level API for controlling the engine. |
+| **Reactive Registry** | `ReactiveRegistry.ts` | A reactive, in-memory database that stores unit state and automatically handles status propagation and event emission. |
+| **Lifecycle** | `lifecycle.ts` | Manages the registration and release of units, ensuring state changes are valid. |
 | **Event Bus** | `event.ts` | A publish-subscribe system that broadcasts events (`start`, `complete`, `error`, `milestone`) across the engine. |
-| **Status Tracker**| `status-tracker.ts` | Manages the setting and tracking of unit status, acting as the single source of truth for state changes. |
 | **Loop** | `loop.ts` | The heart of automatic execution. It runs on a configurable interval, identifies idle units, and executes them. |
 | **Watcher** | `watcher.ts` | A background process that scans for stale or stuck units to ensure engine health and resilience. |
 | **Dashboard** | `dashboard.ts` | An optional console utility for visualizing the state of the engine in real-time. |
@@ -160,10 +213,10 @@ These methods allow you to add, remove, and inspect units in the engine:
     manager.releaseUnit('my-first-worker');
     ```
 
-* `manager.updateUnitConfig(unitId, config)`: Updates the configuration of a registered unit at runtime (e.g., increasing retries).
+* `manager.updateWorkerConfig(workerId, config)` / `manager.updateProcessConfig(processId, config)`: Updates the configuration of a registered unit at runtime.
 
     ```typescript
-    manager.updateUnitConfig('data-ingestion-worker', { maxRetries: 5 });
+    manager.updateWorkerConfig('data-ingestion-worker', { maxRetries: 5 });
     ```
 
 * `manager.updateStatus(unitId, status)`: Manually sets the status of a unit (e.g., resetting a failed worker to `idle`).
@@ -181,9 +234,9 @@ These methods allow you to add, remove, and inspect units in the engine:
 
 ### Manual Execution
 
-Trigger units manually outside of the main execution loop:
+Trigger workers or processes manually outside of the main execution loop:
 
-* `manager.runUnitById(id)`: Immediately executes a single unit (worker or process) by its ID.
+* `manager.runWorkerById(id)`: Immediately executes a single worker by its ID.
 
     ```typescript
     await manager.runUnitById('my-first-worker');
@@ -237,6 +290,8 @@ You can find runnable code examples in the `examples/` directory. These provide 
 * **`5-multi-stage-pipeline.ts`**: Shows how to chain multiple processes together, each with a different `runMode` (`parallel`, `batched`, `sequential`) to create a complex pipeline.
 * **`6-health-monitor.ts`**: A live system monitor using interval-based workers to check the status of services.
 * **`7-dynamic-health-monitor.ts`**: An advanced health monitor that uses a `WorkerPool` to dynamically queue and execute health checks efficiently.
+* **`8-status-tracker-usage.ts`**: Demonstrates how to use the status tracker to monitor and react to unit status changes.
+* **`9-dependency-graph-usage.ts`**: Demonstrates the powerful `dependsOn` feature to create complex, conditional workflows.
 
 ---
 
@@ -250,9 +305,9 @@ synchronik/
 │   ├── core/
 │   │   ├── manager.ts
 │   │   ├── registry.ts
+│   │   ├── ReactiveRegistry.ts
 │   │   ├── lifecycle.ts
 │   │   ├── event.ts
-│   │   ├── status-tracker.ts
 │   │   ├── loop.ts
 │   │   ├── watcher.ts
 │   │   └── dashboard.ts

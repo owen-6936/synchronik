@@ -32,6 +32,7 @@ async function main() {
         id: "health-scheduler",
         name: "Health Check Scheduler",
         enabled: true,
+        status: "idle",
         runOnInterval: true,
         intervalMs: 15000, // Run every 15 seconds
         run: async () => {
@@ -66,6 +67,7 @@ async function main() {
         id: "scheduler-process",
         name: "Scheduler Process",
         workers: [healthSchedulerWorker],
+        status: "idle",
         enabled: true,
     };
 

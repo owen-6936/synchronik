@@ -5,6 +5,39 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.0.0] - 2025-11-21
+
+### ✨ Added (v2.0.0)
+
+- **Dependency-Based Workflows (`dependsOn`)**:
+  - Introduced a powerful `dependsOn` property on `SynchronikWorker` to create complex execution graphs.
+  - Supports both basic dependencies (`dependsOn: ['worker-A']`) and **conditional dependencies** (`dependsOn: [{ id: 'worker-A', condition: (result) => ... }]`) for dynamic, branching workflows.
+  - The engine automatically detects and executes workflows as a dependency graph (DAG) if any worker uses this feature.
+  - Includes robust circular dependency detection to prevent invalid workflows.
+- **Enhanced Logging for Dependency Graphs**: Added console logging to explicitly show when a worker is skipped due to an unmet condition, dramatically improving the debuggability of complex workflows.
+- **API Clarity and Consistency**:
+  - Added new, more specific API methods for managing units: `disableWorker`, `enableWorker`, `disableProcess`, and `enableProcess`.
+
+### ♻️ Changed (v2.0.0)
+
+- **Major Architectural Refactor (Reactive Registry)**:
+  - The core state management has been completely overhauled. The separate `StatusTracker` and `registry` have been replaced by a single, intelligent `ReactiveRegistry`.
+  - **Automatic Status Propagation**: The `ReactiveRegistry` now automatically calculates and updates a process's status based on its workers' states, simplifying logic and increasing robustness.
+  - **Unified Event Emission**: Milestone and error events are now emitted directly from the registry in response to state changes.
+- **API Deprecations**:
+  - The generic `disableUnit` and `enableUnit` methods have been marked as `@deprecated` in favor of the new, more specific `disableWorker`/`disableProcess` methods.
+
+### ⛔ Removed (v2.0.0)
+
+- **`StatusTracker` Module**: As part of the architectural refactor, the standalone `status-tracker.ts` module has been removed. Its logic is now integrated directly into the `ReactiveRegistry`.
+
+---
+
+### ⚠️ BREAKING CHANGES (v2.0.0)
+
+- **Internal Architecture**: While the public-facing `SynchronikManager` API remains largely backward-compatible, the removal of the `StatusTracker` and the introduction of the `ReactiveRegistry` represent a fundamental change in the engine's internal architecture. Any advanced integrations that directly interacted with the old registry or tracker will need to be updated.
+- **Dependency Graph Execution**: When `dependsOn` is used within a process, the process's `runMode` (`parallel`, `sequential`, etc.) is now ignored in favor of the dependency graph execution strategy.
+
 ## [v1.2.1] - 2025-11-11
 
 ### ✨ Added (v1.2.1)

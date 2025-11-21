@@ -1,15 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createSynchronikLoop } from "../../core/loop";
-import { createSynchronikRegistry } from "../../core/registry";
-import { createStatusTracker } from "../../core/status-tracker";
 import { createMilestoneEmitter, SynchronikEventBus } from "../../core/event";
-import { createSynchronikLifecycle } from "../../core/lifecycle";
-import { SynchronikUnit } from "../../types/synchronik";
+import { SynchronikRegistry, SynchronikUnit } from "../../types/synchronik";
+import { ReactiveRegistry } from "../../core/ReactiveRegistry";
 
 describe("SynchronikLoop", () => {
-    let registry: ReturnType<typeof createSynchronikRegistry>;
-    let tracker: ReturnType<typeof createStatusTracker>;
+    let registry: SynchronikRegistry;
     let loop: ReturnType<typeof createSynchronikLoop>;
+    let eventBus: SynchronikEventBus;
 
     const mockWorker = (
         id: string,
@@ -36,16 +34,10 @@ describe("SynchronikLoop", () => {
     });
 
     beforeEach(() => {
-        registry = createSynchronikRegistry();
-        const eventBus = new SynchronikEventBus();
+        eventBus = new SynchronikEventBus();
         const milestoneEmitter = createMilestoneEmitter(eventBus);
-        const lifecycle = createSynchronikLifecycle(
-            registry,
-            eventBus,
-            milestoneEmitter
-        );
-        tracker = createStatusTracker(lifecycle);
-        loop = createSynchronikLoop(registry, tracker);
+        registry = new ReactiveRegistry(milestoneEmitter, eventBus);
+        loop = createSynchronikLoop(registry);
 
         // Prevent unhandled error exceptions by adding a dummy listener for the 'error' event.
         eventBus.subscribe("error", () => {});
@@ -60,7 +52,7 @@ describe("SynchronikLoop", () => {
 
         for (const w of p.workers) {
             expect(w.run).toHaveBeenCalled();
-            expect(tracker.getStatus(w.id)).toBe("completed");
+            expect(registry.getUnitById(w.id)?.status).toBe("completed");
         }
     });
 
@@ -109,7 +101,7 @@ describe("SynchronikLoop", () => {
 
         await loop.run();
 
-        expect(tracker.getStatus("w7")).toBe("error");
+        expect(registry.getUnitById("w7")?.status).toBe("error");
     });
 
     it("does not run workers already marked completed", async () => {
@@ -146,7 +138,7 @@ describe("SynchronikLoop", () => {
 
         for (const w of p.workers) {
             expect(w.run).toHaveBeenCalled();
-            expect(tracker.getStatus(w.id)).toBe("completed");
+            expect(registry.getUnitById(w.id)?.status).toBe("completed");
         }
     });
 
@@ -165,21 +157,11 @@ describe("SynchronikLoop", () => {
 
         for (const w of p.workers) {
             expect(w.run).toHaveBeenCalled();
-            expect(tracker.getStatus(w.id)).toBe("completed");
+            expect(registry.getUnitById(w.id)?.status).toBe("completed");
         }
     });
 
     it("emits milestone with runMode in payload", async () => {
-        const eventBus = new SynchronikEventBus();
-        const milestoneEmitter = createMilestoneEmitter(eventBus);
-        const lifecycle = createSynchronikLifecycle(
-            registry,
-            eventBus,
-            milestoneEmitter
-        );
-        tracker = createStatusTracker(lifecycle);
-        loop = createSynchronikLoop(registry, tracker);
-
         const milestoneSpy = vi.fn();
         eventBus.subscribe("milestone", milestoneSpy);
 

@@ -7,6 +7,7 @@ async function runBasicWorker() {
         name: "Simple Logger",
         description: "A basic worker that logs a message periodically.",
         enabled: true,
+        status: "idle",
         intervalMs: 2000, // Run every 2 seconds
         runOnInterval: true, // Explicitly tell the loop to run this on schedule
         maxRuns: 10,

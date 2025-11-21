@@ -9,12 +9,12 @@ export { runWorkerTasks } from "./utils/task-runner.js";
 export { createSynchronikDashboard } from "./core/dashboard.js";
 export { createSynchronikVisualizer } from "./core/visualizer.js";
 export { createSynchronikLifecycle } from "./core/lifecycle.js";
-export { createStatusTracker } from "./core/status-tracker.js";
 export { createSynchronikLoop } from "./core/loop.js";
 export { createUnitWatcher } from "./core/watcher.js";
 export { SynchronikEventBus, createMilestoneEmitter } from "./core/event.js";
 export { createSynchronikRegistry } from "./core/registry.js";
 export { SynchronikWorkerManager } from "./core/workers-manager.js";
+export { ReactiveRegistry } from "./core/ReactiveRegistry.js";
 
 export type {
     Task,
@@ -25,7 +25,6 @@ export type {
     MilestoneEmitter,
     RunMode,
     SynchronikLifecycle,
-    StatusTracker,
     SynchronikLoop,
     UnitWatcher,
     ISynchronikEventBus,
@@ -41,4 +40,5 @@ export type {
     SynchronikRegistry,
     UpdateProcessConfig,
     UpdateWorkerConfig,
+    Dependency,
 } from "./types/synchronik.js";

@@ -1,6 +1,6 @@
 {
     "name": "synchronik",
-    "version": "1.2.1",
+    "version": "2.0.0",
     "description": "A modular orchestration engine for building resilient, milestone-driven workflows in Node.js.",
     "homepage": "https://github.com/owen-6936/synchronik#readme",
     "bugs": {
@@ -60,7 +60,9 @@
         "example:advancedv3": "tsx examples/4-resilient-scraper.ts",
         "example:advancedv4": "tsx examples/5-multi-stage-pipeline.ts",
         "example:advancedv5": "tsx examples/6-health-monitor.ts",
-        "example:advancedv6": "tsx examples/7-dynamic-health-monitor.ts"
+        "example:advancedv6": "tsx examples/7-dynamic-health-monitor.ts",
+        "example:advancedv7": "tsx examples/8-status-tracker-usage.ts",
+        "example:advancedv8": "tsx examples/9-dependency-graph-usage.ts"
     },
     "dependencies": {
         "axios": "^1.7.2",
