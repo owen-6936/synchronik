@@ -24,6 +24,7 @@ async function main() {
             id: `validate-${file}`,
             name: `Validate ${file}`,
             enabled: true,
+            status: "idle",
             run: async () => {
                 console.log(`[VALIDATE] Checking ${file}...`);
                 await wait(50 + Math.random() * 50);
@@ -39,6 +40,7 @@ async function main() {
         id: "validation-process",
         name: "File Validation Stage",
         runMode: "parallel",
+        status: "idle",
         enabled: false,
         workers: validationWorkers,
         onComplete: () => {
@@ -57,6 +59,7 @@ async function main() {
         .map((file) => ({
             id: `transform-${file}`,
             name: `Transform ${file}`,
+            status: "idle",
             enabled: true,
             run: async () => {
                 console.log(`[TRANSFORM] Processing ${file}...`);
@@ -69,6 +72,7 @@ async function main() {
         id: "transformation-process",
         name: "File Transformation Stage",
         runMode: "batched",
+        status: "idle",
         enabled: false,
         batchSize: 2, // Process 2 files at a time
         workers: transformationWorkers,
@@ -88,6 +92,7 @@ async function main() {
         .map((file) => ({
             id: `upload-${file}`,
             name: `Upload ${file}`,
+            status: "idle",
             enabled: true,
             run: async () => {
                 console.log(`[UPLOAD] Uploading ${file} to server...`);
@@ -100,6 +105,7 @@ async function main() {
         id: "upload-process",
         name: "File Upload Stage",
         runMode: "sequential",
+        status: "idle",
         enabled: false,
         workers: uploadWorkers,
         onComplete: () => {

@@ -212,7 +212,7 @@ export interface SynchronikWorker extends SynchronikUnit {
      * The core asynchronous function that contains the worker's business logic.
      * If this function throws an unhandled error, the engine's retry mechanism will be triggered.
      */
-    run: () => Promise<void>;
+    run: () => Promise<any>;
     /** The interval in milliseconds at which the worker should be run by the automatic loop. */
     intervalMs?: number;
     /**
@@ -240,7 +240,29 @@ export interface SynchronikWorker extends SynchronikUnit {
      */
     retryDelayMs?: number | ((attempt: number) => number);
     task?: string | undefined;
+    /** The ID of the process this worker belongs to, if any. */
     processId?: string;
+    /** The current status of the worker. Unlike other units, this is not optional for a worker. */
+    status: Status;
+    /**
+     * An array of worker IDs that must be successfully completed before this worker can run.
+     * All depended-upon workers must belong to the same process.
+     * @default []
+     */
+    dependsOn?: (string | Dependency)[];
+}
+
+/**
+ * Defines a conditional dependency between workers.
+ */
+export interface Dependency {
+    /** The ID of the worker that must be completed. */
+    id: string;
+    /**
+     * An optional function that evaluates the result of the parent worker.
+     * If the function returns `false`, this dependency is considered unmet, and the current worker will be skipped.
+     */
+    condition?: (result: any) => boolean;
 }
 
 /**
@@ -248,6 +270,7 @@ export interface SynchronikWorker extends SynchronikUnit {
  * A process defines how its workers are executed via its `runMode`.
  */
 export interface SynchronikProcess extends SynchronikUnit {
+    status: Status;
     workers: SynchronikWorker[];
     runAll?: () => Promise<void>;
 
@@ -299,6 +322,10 @@ export interface SynchronikManager {
     stopWorkerById: (workerId: string) => void;
     disableUnit: (id: string) => void;
     enableUnit: (id: string) => void;
+    enableWorker: (workerId: string) => void;
+    disableWorker: (workerId: string) => void;
+    enableProcess: (processId: string) => void;
+    disableProcess: (processId: string) => void;
 
     // Status and querying
     getUnitStatus: (id: string) => SynchronikUnit["status"];
@@ -324,7 +351,17 @@ export interface SynchronikManager {
 
     // Unit Management
     releaseUnit: (id: string) => void;
-    updateStatus: StatusTracker["setStatus"];
+    /**
+     * Manually sets the status of a unit.
+     * @param unitId The ID of the unit to update.
+     * @param status The new status to set.
+     * @param options Optional parameters, including a payload for the emitted milestone.
+     */
+    updateStatus: (
+        unitId: string,
+        status: Status,
+        options?: { payload?: Record<string, unknown> }
+    ) => void;
     getRegistrySnapshot: () => SynchronikUnit[];
 
     /**
@@ -524,22 +561,6 @@ export interface SynchronikLifecycle {
         milestoneId: string,
         payload?: Record<string, unknown>
     ) => void;
-}
-
-/**
- * Manages the status of Synchronik units, providing methods to set and retrieve their current state.
- * It integrates with the lifecycle manager and visualizer to ensure status changes are propagated and rendered.
- */
-export interface StatusTracker {
-    setStatus: (
-        unitId: string,
-        status: SynchronikUnit["status"],
-        options?: {
-            emitMilestone?: boolean;
-            payload?: Record<string, unknown>;
-        }
-    ) => void;
-    getStatus: (unitId: string) => SynchronikUnit["status"];
 }
 
 /** The engine's main execution loop. */

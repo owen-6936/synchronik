@@ -23,6 +23,7 @@ async function main() {
             id: `health-check-`,
             name: `Health Check: `,
             enabled: true,
+            status: "idle",
             runOnInterval: true,
             intervalMs: 30000, // Check every 30 seconds
             run: async () => {
@@ -39,6 +40,7 @@ async function main() {
         id: "master-watcher",
         name: "Master Watcher",
         enabled: true,
+        status: "idle",
         runOnInterval: true,
         intervalMs: 10000, // Check every 10 seconds
         run: async () => {
@@ -69,6 +71,7 @@ async function main() {
         id: "health-monitor-process",
         name: "Health Monitor",
         workers: [...healthCheckWorkers, masterWatcherWorker],
+        status: "idle",
     };
 
     manager.registerUnit(healthMonitorProcess);

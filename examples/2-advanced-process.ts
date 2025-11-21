@@ -15,6 +15,7 @@ async function main() {
         id: "data-ingestion-worker",
         name: "Data Ingestion Worker",
         enabled: true,
+        status: "idle",
         maxRetries: 1, // Retries for catastrophic worker failures
 
         // This hook is for critical, unrecoverable worker failures.
@@ -68,6 +69,7 @@ async function main() {
         id: "data-ingestion-process",
         name: "Nightly Data Ingestion",
         enabled: true,
+        status: "idle",
         runMode: "parallel",
         workers: [dataIngestionWorker],
     };

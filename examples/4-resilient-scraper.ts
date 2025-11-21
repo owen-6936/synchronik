@@ -56,6 +56,7 @@ async function main() {
     const scraperWorker: SynchronikWorker = {
         id: "resilient-scraper-worker",
         name: "Resilient API Scraper",
+        status: "idle",
         enabled: true,
         run: async () => {
             console.log(
@@ -89,6 +90,7 @@ async function main() {
     const scrapingProcess: SynchronikProcess = {
         id: "scraping-process",
         name: "URL Scraping Process",
+        status: "idle",
         enabled: true,
         workers: [scraperWorker],
     };

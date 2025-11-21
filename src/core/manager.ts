@@ -1,14 +1,17 @@
 import type {
     SynchronikEvent,
+    SynchronikLoop,
     SynchronikManager,
+    SynchronikProcess,
+    SynchronikRegistry,
     SynchronikUnit,
+    SynchronikWorker,
     WorkerManager,
 } from "../types/synchronik.js";
 import { createMilestoneEmitter, SynchronikEventBus } from "./event.js";
 import { createSynchronikLifecycle } from "./lifecycle.js";
 import { createSynchronikLoop } from "./loop.js";
-import { createSynchronikRegistry } from "./registry.js";
-import { createStatusTracker } from "./status-tracker.js";
+import { ReactiveRegistry } from "./ReactiveRegistry.js";
 import { SynchronikWorkerManager } from "./workers-manager.js";
 import { createSynchronikVisualizer } from "./visualizer.js";
 import { createUnitWatcher } from "./watcher.js";
@@ -38,17 +41,21 @@ export function createSynchronikManager(options?: {
      */
     const loopIntervalMs = options?.loopInterval ?? 1000;
     const watcherIntervalMs = options?.watcherInterval ?? 60 * 1000;
-    const registry = createSynchronikRegistry();
+
     const eventBus = new SynchronikEventBus();
     const milestoneEmitter = createMilestoneEmitter(eventBus);
+    const registry: SynchronikRegistry = new ReactiveRegistry(
+        milestoneEmitter,
+        eventBus
+    );
+
     const lifecycle = createSynchronikLifecycle(
         registry,
         eventBus,
         milestoneEmitter
     );
     const visualizer = createSynchronikVisualizer();
-    const tracker = createStatusTracker(lifecycle, visualizer);
-    const loop = createSynchronikLoop(registry, tracker);
+    const loop: SynchronikLoop = createSynchronikLoop(registry);
     const watcher = createUnitWatcher(registry, lifecycle, {
         idleThresholdMs: 10 * 60 * 1000,
         autoUnpause: true,
@@ -92,7 +99,7 @@ export function createSynchronikManager(options?: {
             for (const process of processes) {
                 if (process.status === "paused") continue;
 
-                tracker.setStatus(process.id, "running");
+                registry.updateUnitState(process.id, { status: "running" });
 
                 for (const worker of process.workers) {
                     if (
@@ -102,23 +109,25 @@ export function createSynchronikManager(options?: {
                     )
                         continue;
 
-                    tracker.setStatus(worker.id, "running");
+                    registry.updateUnitState(worker.id, {
+                        status: "running",
+                    });
 
                     try {
                         await worker.run();
-                        tracker.setStatus(worker.id, "completed", {
-                            emitMilestone: true,
+                        registry.updateUnitState(worker.id, {
+                            status: "completed",
                         });
                     } catch (err) {
-                        tracker.setStatus(worker.id, "error", {
-                            emitMilestone: true,
-                            payload: { error: String(err) },
+                        registry.updateUnitState(worker.id, {
+                            status: "error",
+                            error: err as Error,
                         });
                     }
                 }
 
-                tracker.setStatus(process.id, "completed", {
-                    emitMilestone: true,
+                registry.updateUnitState(process.id, {
+                    status: "completed",
                 });
             }
         },
@@ -143,30 +152,34 @@ export function createSynchronikManager(options?: {
             }
         },
 
+        /**
+         * Executes a single worker by its ID.
+         * @param id The ID of the worker to run.
+         */
         async runWorkerById(id) {
-            /**
-             * Executes a single worker by its ID.
-             * @param id The ID of the worker to run.
-             */
             const worker = registry.getWorkerById(id);
             if (!worker) {
                 return;
             }
 
-            await executeWorkerWithRetry(worker, tracker);
+            try {
+                await executeWorkerWithRetry(worker, registry);
+            } catch {
+                // The error is already handled and logged by executeWorkerWithRetry, so we just catch it here to prevent it from crashing the test.
+            }
         },
 
+        /**
+         * Executes a process and all of its associated workers according to its `runMode`.
+         * @param id The ID of the process to run.
+         */
         async runProcessById(id) {
-            /**
-             * Executes a process and all of its associated workers according to its `runMode`.
-             * @param id The ID of the process to run.
-             */
             const process = registry.getProcessById(id);
             if (!process || process.status === "paused") return;
 
-            tracker.setStatus(id, "running", {
-                emitMilestone: true,
-                payload: { runMode: process.runMode ?? "sequential" },
+            registry.updateUnitState(id, { status: "running" });
+            milestoneEmitter.emitForUnit(id, "running", {
+                runMode: process.runMode ?? "sequential",
             });
 
             const workers = process.workers.filter((w) => w.enabled);
@@ -175,52 +188,87 @@ export function createSynchronikManager(options?: {
                 workers,
                 process,
                 execute: async (worker) => {
-                    await executeWorkerWithRetry(worker, tracker, {
-                        processId: process.id,
-                    });
+                    try {
+                        const result = await executeWorkerWithRetry(
+                            worker,
+                            registry,
+                            {
+                                processId: process.id,
+                            }
+                        );
 
-                    // After the manual run, handle the run count and disable if maxRuns is reached.
-                    if (worker.status === "completed") {
-                        const runCount = (worker.meta?.runCount ?? 0) + 1;
-                        registry.updateUnitState(worker.id, {
-                            meta: { ...worker.meta, runCount },
-                        });
-                        if (worker.maxRuns && runCount >= worker.maxRuns) {
-                            lifecycle.update(worker.id, { enabled: false });
-                        } else if (worker.runOnInterval) {
-                            // CRITICAL FIX: For interval workers that just completed a manual run,
-                            // clear their lastRun timestamp. This makes them immediately eligible
-                            // for the interval loop on its next tick, without waiting for the full intervalMs
-                            // from the manual run's completion.
+                        // After the manual run, handle the run count and disable if maxRuns is reached.
+                        if (worker.status === "completed") {
+                            const newRunCount =
+                                (worker.meta?.runCount ?? 0) + 1;
+                            const newMeta = {
+                                ...worker.meta,
+                                runCount: newRunCount,
+                            };
+
+                            // Update the registry with the new meta object
                             registry.updateUnitState(worker.id, {
-                                lastRun: undefined as any,
+                                meta: newMeta,
                             });
+
+                            if (
+                                worker.maxRuns &&
+                                newRunCount >= worker.maxRuns
+                            ) {
+                                lifecycle.update(worker.id, { enabled: false });
+                            } else if (worker.runOnInterval) {
+                                registry.updateUnitState(worker.id, {
+                                    lastRun: undefined as any,
+                                });
+                            }
                         }
+                        return result;
+                    } catch (error) {
+                        // Catch errors from individual workers to allow the process to continue (e.g., for batched mode)
+                        return Promise.reject(error); // Propagate rejection so graph can handle it
                     }
                 },
             });
 
-            tracker.setStatus(id, "completed", {
-                emitMilestone: true,
-                payload: { runMode: process.runMode ?? "sequential" },
+            registry.updateUnitState(id, { status: "completed" });
+            milestoneEmitter.emitForUnit(id, "completed", {
+                runMode: process.runMode ?? "sequential",
             });
         },
 
         /**
          * Disables a specific unit, preventing it from being executed.
          * @param id The ID of the unit to disable.
+         * @deprecated Use disableWorker or disableProcess instead.
          */
-        disableUnit(id) {
-            lifecycle.update(id, { enabled: false });
-        },
+        disableUnit: (id) => lifecycle.update(id, { enabled: false }),
+        /**
+         * Disables a specific worker, preventing it from being executed.
+         * @param id The ID of the worker to disable.
+         */
+        disableWorker: (id) => lifecycle.update(id, { enabled: false }),
+        /**
+         * Disables a specific process, preventing it from being executed.
+         * @param id The ID of the process to disable.
+         */
+        disableProcess: (id) => lifecycle.update(id, { enabled: false }),
 
         /**
          * Enables a specific unit, allowing it to be executed.
          * @param id The ID of the unit to enable.
+         * @deprecated Use enableWorker or enableProcess instead.
          */
-        enableUnit(id) {
-            lifecycle.update(id, { enabled: true });
-        },
+        enableUnit: (id) => lifecycle.update(id, { enabled: true }),
+        /**
+         * Enables a specific worker, allowing it to be executed.
+         * @param id The ID of the worker to enable.
+         */
+        enableWorker: (id) => lifecycle.update(id, { enabled: true }),
+        /**
+         * Enables a specific process, allowing it to be executed.
+         * @param id The ID of the process to enable.
+         */
+        enableProcess: (id) => lifecycle.update(id, { enabled: true }),
 
         /**
          * Retrieves the current status of a unit (e.g., 'idle', 'running').
@@ -231,8 +279,28 @@ export function createSynchronikManager(options?: {
             return unit?.status;
         },
 
+        /**
+         * Lists all registered units (both workers and processes).
+         * @returns An array of all `SynchronikUnit` objects.
+         */
         listUnits(): SynchronikUnit[] {
             return registry.listUnits();
+        },
+
+        /**
+         * Lists all registered processes.
+         * @returns An array of all `SynchronikProcess` objects.
+         */
+        listProcesses(): SynchronikProcess[] {
+            return registry.listProcesses();
+        },
+
+        /**
+         * Lists all registered workers.
+         * @returns An array of all `SynchronikWorker` objects.
+         */
+        listWorkers(): SynchronikWorker[] {
+            return registry.listWorkers();
         },
 
         /**
@@ -244,6 +312,11 @@ export function createSynchronikManager(options?: {
             milestoneEmitter.emit(id, payload);
         },
 
+        /**
+         * Subscribes to all events emitted by the engine's event bus.
+         * @param listener A function that will be called with every `SynchronikEvent`.
+         * @returns An `unsubscribe` function to stop listening.
+         */
         subscribeToEvents(
             listener: (event: SynchronikEvent) => void
         ): () => void {
@@ -265,19 +338,37 @@ export function createSynchronikManager(options?: {
             lifecycle.update(workerId, { enabled: false }),
         /** Releases a unit from the engine, removing it from the registry. */
         releaseUnit: lifecycle.release,
-        /** Manually sets the status of a unit. */
-        updateStatus: tracker.setStatus,
+        /** Manually sets the status of a unit. Uses the active status management system. */
+        updateStatus: (unitId, status, options) => {
+            registry.updateUnitState(unitId, {
+                status,
+                ...options?.payload,
+            });
+        },
 
+        /**
+         * Returns a snapshot of all units currently in the registry.
+         * @returns An array of `SynchronikUnit` objects.
+         */
         getRegistrySnapshot() {
             return registry.listUnits();
         },
 
+        /**
+         * Subscribes to 'milestone' events.
+         * @param handler A function to be called when a milestone is emitted.
+         * @returns An `unsubscribe` function.
+         */
         onMilestone(handler) {
             return eventBus.subscribe("milestone", (event) => {
                 handler(event.milestoneId, event.payload);
             });
         },
 
+        /**
+         * Creates and integrates a `WorkerManager` (worker pool) with the core engine.
+         * @param poolSize The number of concurrent workers in the pool.
+         */
         useWorkerPool(poolSize: number = 5): WorkerManager {
             const workerManager = new SynchronikWorkerManager(poolSize);
 
@@ -301,9 +392,19 @@ export function createSynchronikManager(options?: {
             return workerManager;
         },
 
+        /**
+         * Updates the configuration of a specific worker at runtime.
+         * @param workerId The ID of the worker to update.
+         * @param config A partial `SynchronikWorker` configuration object.
+         */
         updateWorkerConfig(workerId, config) {
             registry.updateWorkerConfig(workerId, config);
         },
+        /**
+         * Updates the configuration of a specific process at runtime.
+         * @param processId The ID of the process to update.
+         * @param config A partial `SynchronikProcess` configuration object.
+         */
         updateProcessConfig(processId, config) {
             registry.updateProcessConfig(processId, config);
         },
