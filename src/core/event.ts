@@ -64,22 +64,10 @@ export function createMilestoneEmitter(
     eventBus: SynchronikEventBus
 ): MilestoneEmitter {
     return {
-        /**
-     * Emits a generic milestone event.
-
-     * @param milestoneId A unique identifier for the milestone.
-     * @param payload Optional data to include with the event.
-     */
         emit(milestoneId, payload = {}) {
             eventBus.emit({ type: "milestone", milestoneId, payload });
         },
 
-        /**
-         * Emits a milestone event specifically for a unit's lifecycle stage (e.g., 'completed', 'released').
-         * @param unitId The ID of the unit.
-         * @param stage The lifecycle stage (e.g., 'completed', 'released').
-         * @param payload Optional data to include with the event.
-         */
         emitForUnit(unitId, stage, payload = {}) {
             const milestoneId = `unit:${unitId}:${stage}`;
             eventBus.emit({ type: "milestone", milestoneId, payload });

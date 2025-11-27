@@ -45,9 +45,7 @@ export function createSynchronikLoop(
                     process,
                     execute: async (worker) => {
                         try {
-                            await executeWorkerWithRetry(worker, registry, {
-                                processId: process.id,
-                            });
+                            await executeWorkerWithRetry(worker, registry);
                         } catch {
                             // Catch errors to prevent them from crashing the loop. The status is already set to 'error' inside executeWorkerWithRetry.
                         }
@@ -76,9 +74,7 @@ export function createSynchronikLoop(
                 }
 
                 try {
-                    await executeWorkerWithRetry(worker, registry, {
-                        processId: worker.processId ?? "",
-                    });
+                    await executeWorkerWithRetry(worker, registry);
                 } catch {
                     // Also catch errors for interval workers.
                 }

@@ -163,10 +163,7 @@ async function executeWithDependencies(
  */
 export async function executeWorkerWithRetry(
     worker: SynchronikWorker,
-    statusUpdater: SynchronikRegistry,
-    options?: {
-        processId?: string;
-    }
+    statusUpdater: SynchronikRegistry
 ): Promise<any> {
     if (worker.status === "paused" || worker.status === "completed") {
         return;
@@ -198,7 +195,7 @@ export async function executeWorkerWithRetry(
             if (attempt >= retries) {
                 setStatus("error", err as Error);
 
-                // Invoke the worker's own onError hook, if it exists.
+                // Invoke the worker's own onError hook.
                 if (worker.onError) {
                     worker.onError(err as Error);
                 }

@@ -21,22 +21,11 @@ export function createSynchronikLifecycle(
     milestoneEmitter: MilestoneEmitter
 ): SynchronikLifecycle {
     return {
-        /**
-     * Registers a new unit with the engine.
-
-     * @param unit The unit to register.
-     */
         register(unit) {
             registry.registerUnit(unit);
             eventBus.emit({ type: "start", unitId: unit.id });
         },
 
-        /**
-
-     * Updates the state of an existing unit.
-     * @param id The ID of the unit to update.
-     * @param updates A partial object of properties to update.
-     */
         update(id, updates) {
             const { status, error, ...rest } = updates;
             registry.updateUnitState(id, { status, error, ...rest });
@@ -55,20 +44,11 @@ export function createSynchronikLifecycle(
             }
         },
 
-        /**
-         * Releases a unit from the engine, removing it from the registry.
-         * @param id The ID of the unit to release.
-         */
         release(id) {
             registry.releaseUnit(id);
             milestoneEmitter.emit(`unit:${id}:released`);
         },
 
-        /**
-         * Emits a custom milestone event.
-         * @param milestoneId A unique identifier for the milestone.
-         * @param payload Optional data to include with the milestone.
-         */
         emitMilestone(milestoneId, payload) {
             milestoneEmitter.emit(milestoneId, payload);
         },

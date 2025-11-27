@@ -26,11 +26,13 @@ import {
  * @returns A `SynchronikManager` instance with a full API for managing workflows.
  * @param options Configuration options for the manager.
  * @param options.loopInterval The interval in milliseconds at which the main execution loop runs. @default 1000
- * @param options.watcherInterval The interval in milliseconds at which the unit watcher runs. @default 60000
+ * @param options.watcherInterval The interval in milliseconds at which the unit watcher runs. @default 60000.
+ * @param options.statsEmissionIntervalMs If provided, the engine will automatically emit its resource stats on this interval.
  */
 export function createSynchronikManager(options?: {
     loopInterval?: number;
     watcherInterval?: number;
+    statsEmissionIntervalMs?: number;
 }): SynchronikManager {
     /**
 
@@ -41,6 +43,7 @@ export function createSynchronikManager(options?: {
      */
     const loopIntervalMs = options?.loopInterval ?? 1000;
     const watcherIntervalMs = options?.watcherInterval ?? 60 * 1000;
+    const statsEmissionIntervalMs = options?.statsEmissionIntervalMs;
 
     const eventBus = new SynchronikEventBus();
     const milestoneEmitter = createMilestoneEmitter(eventBus);
@@ -74,6 +77,11 @@ export function createSynchronikManager(options?: {
      */
     let loopInterval: NodeJS.Timeout | null = null;
     let watcherInterval: NodeJS.Timeout | null = null;
+    let statsInterval: NodeJS.Timeout | null = null;
+
+    // State for CPU percentage calculation
+    let lastCpuUsage: NodeJS.CpuUsage | undefined;
+    let lastCpuTime: number | undefined;
 
     const managerApi: SynchronikManager = {
         /**
@@ -85,14 +93,19 @@ export function createSynchronikManager(options?: {
                 () => watcher.scan(),
                 watcherIntervalMs
             );
+
+            if (statsEmissionIntervalMs) {
+                statsInterval = setInterval(() => {
+                    const stats = this.getEngineStats();
+                    milestoneEmitter.emit("engine:stats", stats);
+                }, statsEmissionIntervalMs);
+            }
         },
 
-        /**
-         * Gracefully stops the engine. It clears the background intervals and attempts to complete any in-progress work before exiting.
-         */
         async stop() {
             if (loopInterval) clearInterval(loopInterval);
             if (watcherInterval) clearInterval(watcherInterval);
+            if (statsInterval) clearInterval(statsInterval);
 
             const processes = registry.listProcesses();
 
@@ -132,9 +145,6 @@ export function createSynchronikManager(options?: {
             }
         },
 
-        /**
-         * Sets all registered units to an 'idle' status, effectively enabling them for execution.
-         */
         startAll() {
             for (const unit of registry.listUnits()) {
                 if (unit.status === "paused") {
@@ -143,19 +153,12 @@ export function createSynchronikManager(options?: {
             }
         },
 
-        /**
-         * Sets all registered units to a 'paused' status, preventing them from being executed.
-         */
         stopAll() {
             for (const unit of registry.listUnits()) {
                 lifecycle.update(unit.id, { status: "paused" });
             }
         },
 
-        /**
-         * Executes a single worker by its ID.
-         * @param id The ID of the worker to run.
-         */
         async runWorkerById(id) {
             const worker = registry.getWorkerById(id);
             if (!worker) {
@@ -169,10 +172,6 @@ export function createSynchronikManager(options?: {
             }
         },
 
-        /**
-         * Executes a process and all of its associated workers according to its `runMode`.
-         * @param id The ID of the process to run.
-         */
         async runProcessById(id) {
             const process = registry.getProcessById(id);
             if (!process || process.status === "paused") return;
@@ -191,10 +190,7 @@ export function createSynchronikManager(options?: {
                     try {
                         const result = await executeWorkerWithRetry(
                             worker,
-                            registry,
-                            {
-                                processId: process.id,
-                            }
+                            registry
                         );
 
                         // After the manual run, handle the run count and disable if maxRuns is reached.
@@ -236,87 +232,39 @@ export function createSynchronikManager(options?: {
             });
         },
 
-        /**
-         * Disables a specific unit, preventing it from being executed.
-         * @param id The ID of the unit to disable.
-         * @deprecated Use disableWorker or disableProcess instead.
-         */
         disableUnit: (id) => lifecycle.update(id, { enabled: false }),
-        /**
-         * Disables a specific worker, preventing it from being executed.
-         * @param id The ID of the worker to disable.
-         */
+
         disableWorker: (id) => lifecycle.update(id, { enabled: false }),
-        /**
-         * Disables a specific process, preventing it from being executed.
-         * @param id The ID of the process to disable.
-         */
+
         disableProcess: (id) => lifecycle.update(id, { enabled: false }),
 
-        /**
-         * Enables a specific unit, allowing it to be executed.
-         * @param id The ID of the unit to enable.
-         * @deprecated Use enableWorker or enableProcess instead.
-         */
         enableUnit: (id) => lifecycle.update(id, { enabled: true }),
-        /**
-         * Enables a specific worker, allowing it to be executed.
-         * @param id The ID of the worker to enable.
-         */
+
         enableWorker: (id) => lifecycle.update(id, { enabled: true }),
-        /**
-         * Enables a specific process, allowing it to be executed.
-         * @param id The ID of the process to enable.
-         */
+
         enableProcess: (id) => lifecycle.update(id, { enabled: true }),
 
-        /**
-         * Retrieves the current status of a unit (e.g., 'idle', 'running').
-         * @param id The ID of the unit.
-         */
         getUnitStatus(id: string): SynchronikUnit["status"] | undefined {
             const unit = registry.getUnitById(id);
             return unit?.status;
         },
 
-        /**
-         * Lists all registered units (both workers and processes).
-         * @returns An array of all `SynchronikUnit` objects.
-         */
         listUnits(): SynchronikUnit[] {
             return registry.listUnits();
         },
 
-        /**
-         * Lists all registered processes.
-         * @returns An array of all `SynchronikProcess` objects.
-         */
         listProcesses(): SynchronikProcess[] {
             return registry.listProcesses();
         },
 
-        /**
-         * Lists all registered workers.
-         * @returns An array of all `SynchronikWorker` objects.
-         */
         listWorkers(): SynchronikWorker[] {
             return registry.listWorkers();
         },
 
-        /**
-         * Emits a custom milestone event.
-         * @param id A unique identifier for the milestone.
-         * @param payload Optional data to include with the milestone.
-         */
         emitMilestone(id: string, payload?: Record<string, unknown>) {
             milestoneEmitter.emit(id, payload);
         },
 
-        /**
-         * Subscribes to all events emitted by the engine's event bus.
-         * @param listener A function that will be called with every `SynchronikEvent`.
-         * @returns An `unsubscribe` function to stop listening.
-         */
         subscribeToEvents(
             listener: (event: SynchronikEvent) => void
         ): () => void {
@@ -325,15 +273,8 @@ export function createSynchronikManager(options?: {
 
         // --- Direct Lifecycle, Registry, and Tracker Access ---
 
-        /**
-         * Registers a new unit with the engine.
-         * @param unit The unit to register.
-         */
         registerUnit: lifecycle.register,
-        /**
-         * Stops a specific worker by setting its `enabled` flag to `false`.
-         * @param workerId The ID of the worker to stop.
-         */
+
         stopWorkerById: (workerId: string) =>
             lifecycle.update(workerId, { enabled: false }),
         /** Releases a unit from the engine, removing it from the registry. */
@@ -346,29 +287,16 @@ export function createSynchronikManager(options?: {
             });
         },
 
-        /**
-         * Returns a snapshot of all units currently in the registry.
-         * @returns An array of `SynchronikUnit` objects.
-         */
         getRegistrySnapshot() {
             return registry.listUnits();
         },
 
-        /**
-         * Subscribes to 'milestone' events.
-         * @param handler A function to be called when a milestone is emitted.
-         * @returns An `unsubscribe` function.
-         */
         onMilestone(handler) {
             return eventBus.subscribe("milestone", (event) => {
                 handler(event.milestoneId, event.payload);
             });
         },
 
-        /**
-         * Creates and integrates a `WorkerManager` (worker pool) with the core engine.
-         * @param poolSize The number of concurrent workers in the pool.
-         */
         useWorkerPool(poolSize: number = 5): WorkerManager {
             const workerManager = new SynchronikWorkerManager(poolSize);
 
@@ -392,21 +320,50 @@ export function createSynchronikManager(options?: {
             return workerManager;
         },
 
-        /**
-         * Updates the configuration of a specific worker at runtime.
-         * @param workerId The ID of the worker to update.
-         * @param config A partial `SynchronikWorker` configuration object.
-         */
         updateWorkerConfig(workerId, config) {
             registry.updateWorkerConfig(workerId, config);
         },
-        /**
-         * Updates the configuration of a specific process at runtime.
-         * @param processId The ID of the process to update.
-         * @param config A partial `SynchronikProcess` configuration object.
-         */
+
         updateProcessConfig(processId, config) {
             registry.updateProcessConfig(processId, config);
+        },
+
+        getEngineStats() {
+            const memoryUsage = process.memoryUsage();
+
+            // --- CPU Percentage Calculation ---
+            const currentCpuTime = Date.now();
+            const currentCpuUsage = process.cpuUsage();
+
+            let cpuPercentage = 0;
+
+            if (lastCpuTime && lastCpuUsage) {
+                const elapsedTime = (currentCpuTime - lastCpuTime) * 1000; // elapsed time in microseconds
+                const elapsedUserUsage =
+                    currentCpuUsage.user - lastCpuUsage.user;
+                const elapsedSystemUsage =
+                    currentCpuUsage.system - lastCpuUsage.system;
+
+                if (elapsedTime > 0) {
+                    const totalElapsedUsage =
+                        elapsedUserUsage + elapsedSystemUsage;
+                    cpuPercentage = (totalElapsedUsage / elapsedTime) * 100;
+                }
+            }
+
+            // Update last values for the next call
+            lastCpuTime = currentCpuTime;
+            lastCpuUsage = currentCpuUsage;
+
+            return {
+                memory: {
+                    rss: `${(memoryUsage.rss / 1024 / 1024).toFixed(2)} MB`,
+                    heapTotal: `${(memoryUsage.heapTotal / 1024 / 1024).toFixed(2)} MB`,
+                    heapUsed: `${(memoryUsage.heapUsed / 1024 / 1024).toFixed(2)} MB`,
+                    external: `${(memoryUsage.external / 1024 / 1024).toFixed(2)} MB`,
+                },
+                cpu: `${cpuPercentage.toFixed(2)}%`,
+            };
         },
     };
 

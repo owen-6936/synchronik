@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createSynchronikManager } from "../../core/manager";
 import type {
     RunMode,
@@ -112,10 +112,7 @@ describe("SynchronikManager", () => {
         const w = mockWorker("w8");
         manager.registerUnit(w);
 
-        manager.updateStatus("w8", "error", {
-            emitMilestone: true,
-            payload: { reason: "fail" },
-        });
+        manager.updateStatus("w8", "error", { payload: { reason: "fail" } });
 
         expect(events.some((e) => e.id?.includes("w8"))).toBe(true);
     });
@@ -372,5 +369,51 @@ describe("SynchronikManager", () => {
         // 5. Assert that it was attempted twice (initial + 1 retry) and eventually completed.
         expect(retryableWorker.run).toHaveBeenCalledTimes(2);
         expect(manager.getUnitStatus("dynamic-retry-worker")).toBe("completed");
+    });
+});
+
+describe("SynchronikManager - Engine Stats", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+    });
+
+    it("should return engine stats and calculate CPU percentage over time", () => {
+        const manager = createSynchronikManager();
+
+        // Mock process.cpuUsage to control the values for the test
+        const initialCpuUsage = { user: 100000, system: 50000 };
+        const laterCpuUsage = { user: 200000, system: 75000 };
+
+        const cpuUsageMock = vi
+            .spyOn(process, "cpuUsage")
+            .mockReturnValueOnce(initialCpuUsage) // First call
+            .mockReturnValue(laterCpuUsage); // Subsequent calls
+
+        // --- First call ---
+        // This will set the baseline and should return 0% CPU
+        const firstStats = manager.getEngineStats();
+        console.log("Initial Stats:", firstStats);
+
+        // Assertions for the first call
+        expect(firstStats.cpu).toBe("0.00%");
+        expect(firstStats.memory.rss).toMatch(/\d+\.\d{2} MB/);
+
+        // --- Second call after some time ---
+        // Simulate 1 second (1000ms) passing
+        vi.advanceTimersByTime(1000);
+
+        const secondStats = manager.getEngineStats();
+        console.log("Stats after 1 second:", secondStats);
+
+        // Assertions for the second call
+        // elapsed time = 1000ms = 1,000,000 microseconds
+        // total elapsed CPU = (200000 - 100000) + (75000 - 50000) = 125000
+        // percentage = (125000 / 1000000) * 100 = 12.5%
+        expect(secondStats.cpu).toBe("12.50%");
     });
 });

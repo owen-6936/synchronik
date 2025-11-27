@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/License-Apache--2.0-green)](LICENSE)
 [![CI](https://github.com/owen-6936/synchronik/actions/workflows/ci.yml/badge.svg)](https://github.com/owen-6936/synchronik/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/owen-6936/synchronik/actions/workflows/codeql.yml/badge.svg)](https://github.com/owen-6936/synchronik/actions/workflows/codeql.yml)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/owen-6936/synchronik/publish.yml?branch=release/v2.0.0)](https://github.com/owen-6936/synchronik/actions/workflows/publish.yml)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/owen-6936/synchronik/publish.yml?branch=release/v2.1.0)](https://github.com/owen-6936/synchronik/actions/workflows/publish.yml)
 [![JSR](https://jsr.io/badges/@nexicore/synchronik)](https://jsr.io/@nexicore/synchronik)
 ![npm version](https://img.shields.io/npm/v/synchronik)
 
@@ -26,14 +26,26 @@ Whether you're coordinating data pipelines, managing background jobs, or buildin
 
 ### 🎯 Key Features
 
-* **Modular Architecture:** Composed of distinct, swappable components (`Manager`, `Registry`, `Loop`, `Watcher`) for clear separation of concerns.
-* **Event-Driven:** Subscribe to the entire lifecycle of your tasks. React to `start`, `complete`, `error`, and custom `milestone` events in real-time.
-* **Robust State Management:** Reliably track the status of every task (`idle`, `running`, `paused`, `completed`, `error`).
-* **Automatic & Manual Control:** Run tasks on a scheduled interval with the main execution loop or trigger them manually via the API.
-* **Extensible by Design:** Register your own asynchronous functions as **Workers** and group them into **Processes**.
-* **Dependency-Driven Workflows:** Define complex execution graphs where workers can depend on the successful completion (and results) of others.
-* **Resilience Built-In:** Includes a `Watcher` to detect and handle stale or stuck tasks, ensuring your engine remains healthy.
-* **Visualization Hooks:** The event bus makes it trivial to connect real-time dashboards and monitoring tools.
+* **Declarative Workflows:** Define complex processes as simple `SynchronikWorker` and `SynchronikProcess` objects.
+* **Dependency Graphs:** Create powerful, conditional workflows using the `dependsOn` property to orchestrate tasks with precision.
+* **Event-Driven Architecture:** Subscribe to the entire lifecycle of your tasks. React to `start`, `complete`, `error`, and custom `milestone` events in real-time.
+* **Built-in Performance & Resource Monitoring:** Automatically track worker execution times and monitor the engine's CPU and memory usage.
+* **Resilience and Retries:** Configure automatic retries with exponential backoff for workers, making your workflows fault-tolerant.
+* **Flexible Run Modes:** Execute workers `sequentially`, in `parallel`, in `batched` groups, or `isolated` with delays.
+* **Automatic & Manual Control:** Run tasks on a scheduled interval or trigger them manually via a clean API.
+
+---
+
+## 🤔 Why Synchronik?
+
+Modern Node.js applications often involve complex asynchronous operations that can become difficult to manage, observe, and debug. Synchronik addresses these challenges by providing a structured framework to solve common problems:
+
+* **❌ Problem: "Callback Hell" & Unstructured `async/await` Chains.**
+  * **✅ Solution:** Synchronik lets you define each step as a distinct `Worker` and orchestrate them within a `Process`, turning tangled code into a clean, declarative workflow.
+* **❌ Problem: Lack of Visibility into Background Jobs.**
+  * **✅ Solution:** The event-driven architecture emits events for every lifecycle change, while built-in monitoring provides live insights into performance and resource usage.
+* **❌ Problem: Handling Failures and Retries is Repetitive.**
+  * **✅ Solution:** Define `maxRetries` and `retryDelayMs` on your workers, and the engine handles the rest, complete with `onError` hooks for final failure states.
 
 ---
 
@@ -161,7 +173,11 @@ You can create a manager instance using the `createSynchronikManager` factory fu
 ```typescript
 import { createSynchronikManager } from 'synchronik';
 
-const manager = createSynchronikManager();
+// Create a manager that automatically emits resource stats every 5 seconds
+const manager = createSynchronikManager({
+  loopInterval: 1000, // Main execution loop interval
+  statsEmissionIntervalMs: 5000 
+});
 ```
 
 ### Core Lifecycle Methods
@@ -231,6 +247,10 @@ These methods allow you to add, remove, and inspect units in the engine:
     const allUnits = manager.listUnits();
     console.log(`There are ${allUnits.length} units registered.`);
     ```
+
+### Observability & Monitoring
+
+Synchronik is designed to be highly observable. You can monitor everything from individual worker completions to the engine's own resource usage.
 
 ### Manual Execution
 

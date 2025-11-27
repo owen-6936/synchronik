@@ -1,6 +1,7 @@
 {
     "name": "synchronik",
-    "version": "2.0.0",
+    "version": "2.1.0",
+    "private": false,
     "description": "A modular orchestration engine for building resilient, milestone-driven workflows in Node.js.",
     "homepage": "https://github.com/owen-6936/synchronik#readme",
     "bugs": {
@@ -25,7 +26,18 @@
         "url": "git+https://github.com/owen-6936/synchronik.git"
     },
     "license": "MIT",
-    "author": "Owen Erhabor",
+    "author": "Owen • Nexicore Digital",
+    "contributors": [
+        {
+            "name": "Owen",
+            "email": "erhaborowen3@gmail.com",
+            "url": "https://github.com/owen-6936"
+        }
+    ],
+    "publisher": "owen-6936",
+    "engines": {
+        "node": ">=18.0.0"
+    },
     "type": "module",
     "main": "dist/synchronizer.js",
     "files": [
