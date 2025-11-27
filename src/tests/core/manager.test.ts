@@ -42,11 +42,21 @@ describe("SynchronikManager", () => {
     });
 
     it("registers and snapshots units", () => {
-        const w = mockWorker("w1");
-        manager.registerUnit(w);
+        // structuredClone cannot clone functions, so for this specific test,
+        // we use a plain object without a mock function.
+        const cloneableWorker: SynchronikWorker = {
+            id: "w1",
+            status: "idle",
+            run: async () => {}, // Use a real (but empty) function
+            name: "Cloneable Worker",
+            enabled: true,
+        };
+
+        manager.registerUnit(cloneableWorker);
 
         const snapshot = manager.getRegistrySnapshot();
         expect(snapshot.map((u) => u.id)).toContain("w1");
+        expect(snapshot[0]).not.toBe(cloneableWorker); // Verify it's a clone, not the same object reference
     });
 
     it("runs a unit and emits milestone", async () => {

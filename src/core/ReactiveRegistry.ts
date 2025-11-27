@@ -128,9 +128,10 @@ export class ReactiveRegistry implements SynchronikRegistry {
                 });
             } else if (this.milestoneEmitter) {
                 const payload: Record<string, unknown> = {
-                    ...updates,
+                    ...unit, // Spread the whole unit for a complete, predictable payload
                     previous: oldStatus,
                     current: newStatus,
+                    reason: "status-change", // Add explicit reason for the event
                 };
 
                 // The subtle touch: add duration to the complete event payload
@@ -175,9 +176,10 @@ export class ReactiveRegistry implements SynchronikRegistry {
                     processId,
                     String(newProcessStatus),
                     {
-                        // Use consistent payload keys
+                        ...process, // Spread the whole process for a complete payload
                         previous: oldStatus,
                         current: newProcessStatus,
+                        reason: "status-change", // Add explicit reason
                     }
                 );
             }
