@@ -1,43 +1,43 @@
 {
-  "name": "@nexicore/synchronik",
-  "version": "2.0.0",
-  "description": "Modular toolkit for parsing, validating, and converting structured datasets (CSV ↔ JSON) with reviewer clarity.",
-  "exports": {
-    ".": "./mod.ts"
-  },
-  "publish": {
-    "include": ["src", "mod.ts", "LICENSE", "README.md"],
-    "exclude": ["src/**/*.test.ts"]
-  },
-  "keywords": [
-    "orchestration",
-    "workflow",
-    "engine",
-    "task management",
-    "worker pool",
-    "concurrency",
-    "parallelism",
-    "automation",
-    "nodejs",
-    "typescript",
-    "event-driven",
-    "resilience"
-  ],
-  "author": "Owen Erhabor",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/owen-6936/synchronik.git"
-  },
-  "bugs": {
-    "url": "https://github.com/owen-6936/synchronik/issues"
-  },
-  "homepage": "https://github.com/owen-6936/synchronik#readme",
-  "contributors": [
-    {
-      "name": "Owen",
-      "email": "erhaborowen3@gmail.com",
-      "url": "https://github.com/owen-6936"
-    }
-  ]
+    "name": "@nexicore/synchronik",
+    "version": "2.1.0",
+    "description": "Modular toolkit for parsing, validating, and converting structured datasets (CSV ↔ JSON) with reviewer clarity.",
+    "exports": {
+        ".": "./mod.ts"
+    },
+    "publish": {
+        "include": ["src", "mod.ts", "LICENSE", "README.md"],
+        "exclude": ["src/**/*.test.ts"]
+    },
+    "keywords": [
+        "orchestration",
+        "workflow",
+        "engine",
+        "task management",
+        "worker pool",
+        "concurrency",
+        "parallelism",
+        "automation",
+        "nodejs",
+        "typescript",
+        "event-driven",
+        "resilience"
+    ],
+    "author": "Owen Erhabor",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/owen-6936/synchronik.git"
+    },
+    "bugs": {
+        "url": "https://github.com/owen-6936/synchronik/issues"
+    },
+    "homepage": "https://github.com/owen-6936/synchronik#readme",
+    "contributors": [
+        {
+            "name": "Owen",
+            "email": "erhaborowen3@gmail.com",
+            "url": "https://github.com/owen-6936"
+        }
+    ]
 }

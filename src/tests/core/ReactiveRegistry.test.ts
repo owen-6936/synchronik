@@ -1,4 +1,12 @@
-import { beforeEach, describe, expect, it, Mock, vitest } from "vitest";
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    Mock,
+    vitest,
+    afterEach,
+} from "vitest";
 import { ReactiveRegistry } from "../../core/ReactiveRegistry";
 import {
     SynchronikUnit,
@@ -157,5 +165,77 @@ describe("ReactiveRegistry", () => {
         registry.updateUnitState(worker2.id, { status: "idle" });
 
         expect(registry.getProcessById(processId)?.status).toBe("idle");
+    });
+});
+
+describe("ReactiveRegistry - Performance Metrics", () => {
+    let registry: ReactiveRegistry;
+    let mockMilestoneEmitter: { emit: Mock; emitForUnit: Mock };
+    let mockEventBus: { emit: Mock; subscribe: Mock; subscribeAll: Mock };
+
+    beforeEach(() => {
+        mockMilestoneEmitter = {
+            emit: vitest.fn(),
+            emitForUnit: vitest.fn(),
+        };
+        mockEventBus = {
+            emit: vitest.fn(),
+            subscribe: vitest.fn(),
+            subscribeAll: vitest.fn(),
+        };
+        registry = new ReactiveRegistry(mockMilestoneEmitter, mockEventBus);
+
+        // Use fake timers to control time during tests
+        vitest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        // Restore real timers after each test
+        vitest.useRealTimers();
+    });
+
+    it("should calculate and log execution speed and average on worker completion", () => {
+        const workerId = "perf-worker";
+        const worker: SynchronikWorker = {
+            id: workerId,
+            status: "idle",
+            name: "Performance Worker",
+            enabled: true,
+            run: async () => {},
+        };
+
+        registry.registerUnit(worker);
+
+        // --- First Run (100ms) ---
+        registry.updateUnitState(workerId, { status: "running" });
+        vitest.advanceTimersByTime(100);
+        registry.updateUnitState(workerId, { status: "completed" });
+
+        let updatedWorker = registry.getWorkerById(workerId)!;
+        console.log("After first run (100ms), meta:", updatedWorker.meta);
+
+        expect(updatedWorker.meta?.executionTimesMs).toEqual([100]);
+        expect(updatedWorker.meta?.averageExecutionTimeMs).toBe(100);
+
+        // --- Second Run (200ms) ---
+        registry.updateUnitState(workerId, { status: "running" });
+        vitest.advanceTimersByTime(200);
+        registry.updateUnitState(workerId, { status: "completed" });
+
+        updatedWorker = registry.getWorkerById(workerId)!;
+        console.log("After second run (200ms), meta:", updatedWorker.meta);
+
+        expect(updatedWorker.meta?.executionTimesMs).toEqual([100, 200]);
+        expect(updatedWorker.meta?.averageExecutionTimeMs).toBe(150); // (100 + 200) / 2
+
+        expect(mockMilestoneEmitter.emitForUnit).toHaveBeenCalledWith(
+            workerId,
+            "completed",
+            expect.objectContaining({
+                previous: "running",
+                current: "completed",
+                durationMs: 200,
+            })
+        );
     });
 });

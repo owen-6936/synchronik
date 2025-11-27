@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.1.0] - 2025-11-27
+
+### ✨ Added
+
+- **Worker Performance Metrics**:
+  - The engine now automatically calculates and stores performance metrics on each worker's `meta` object upon successful completion.
+  - `meta.executionTimesMs`: An array containing the duration of each run in milliseconds.
+  - `meta.averageExecutionTimeMs`: The average execution time calculated from all runs.
+- **Engine Resource Monitoring (`getEngineStats`)**:
+  - Introduced a new `manager.getEngineStats()` method to provide a snapshot of the engine's resource consumption.
+  - Returns memory usage (`rss`, `heapTotal`, `heapUsed`) and CPU usage as a percentage calculated since the last call.
+- **Automatic Stats Emission**:
+  - Added a new `statsEmissionIntervalMs` option to `createSynchronikManager`.
+  - When set, the manager will automatically emit the engine's resource stats on a regular interval via a new `engine:stats` milestone.
+
+### ♻️ Changed
+
+- **Enriched `completed` Event Payload**: The milestone event for a worker's `completed` status now includes a `durationMs` property in its payload, providing immediate access to the last run's execution time.
+
+---
+
 ## [v2.0.0] - 2025-11-21
 
 ### ✨ Added (v2.0.0)

@@ -16,11 +16,6 @@ export function createSynchronikRegistry(): SynchronikRegistry {
     const processes = new Map<string, SynchronikProcess>();
 
     return {
-        /**
-         * Registers a new unit with the engine.
-         * This adds it to the appropriate internal data structures (units, workers, processes).
-         * @param unit The unit to register.
-         */
         registerUnit(unit) {
             units.set(unit.id, unit);
 
@@ -38,37 +33,18 @@ export function createSynchronikRegistry(): SynchronikRegistry {
             }
         },
 
-        /**
-         * Retrieves a unit by its ID.
-         * @param id The ID of the unit to retrieve.
-         * @returns The unit, or undefined if not found.
-         */
         getUnitById(id) {
             return units.get(id);
         },
 
-        /**
-         * Retrieves a worker by its ID.
-         * @param id The ID of the worker to retrieve.
-         * @returns The worker, or undefined if not found.
-         */
         getWorkerById(id) {
             return workers.get(id);
         },
 
-        /**
-         * Retrieves a process by its ID.
-         * @param id The ID of the process to retrieve.
-         * @returns The process, or undefined if not found.
-         */
         getProcessById(id) {
             return processes.get(id);
         },
 
-        /**
-         * Lists all currently registered units.
-         * @returns An array of all Synchronik units.
-         */
         listUnits() {
             return Array.from(units.values());
         },
@@ -82,11 +58,6 @@ export function createSynchronikRegistry(): SynchronikRegistry {
         },
 
         updateUnitState<T extends SynchronikUnit>(
-            /**
-             * Updates the state of an existing unit.
-             * @param id The ID of the unit to update.
-             * @param updates A partial object of properties to update.
-             */
             id: string,
             updates: Partial<T>
         ) {

@@ -243,7 +243,7 @@ export interface SynchronikWorker extends SynchronikUnit {
     /** The ID of the process this worker belongs to, if any. */
     processId?: string;
     /** The current status of the worker. Unlike other units, this is not optional for a worker. */
-    status: Status;
+    status?: Status;
     /**
      * An array of worker IDs that must be successfully completed before this worker can run.
      * All depended-upon workers must belong to the same process.
@@ -270,7 +270,7 @@ export interface Dependency {
  * A process defines how its workers are executed via its `runMode`.
  */
 export interface SynchronikProcess extends SynchronikUnit {
-    status: Status;
+    status?: Status;
     workers: SynchronikWorker[];
     runAll?: () => Promise<void>;
 
@@ -312,41 +312,122 @@ export type UpdateProcessConfig<T extends SynchronikProcess> = (
  */
 export interface SynchronikManager {
     // Core registration and control
+    /**
+     * Registers a new unit with the engine.
+     * @param unit The unit to register.
+     */
     registerUnit: (unit: SynchronikUnit) => void;
+
+    /**
+     * Sets all registered units to an 'idle' status, effectively enabling them for execution.
+     */
     startAll: () => void;
+    /**
+     * Sets all registered units to a 'paused' status, preventing them from being executed.
+     */
     stopAll: () => void;
 
     // Execution
+
+    /**
+     * Executes a single worker by its ID.
+     * @param id The ID of the worker to run.
+     */
     runWorkerById: (workerId: string) => Promise<void>;
+
+    /**
+     * Executes a process and all of its associated workers according to its `runMode`.
+     * @param id The ID of the process to run.
+     */
     runProcessById: (processId: string) => Promise<void>;
+    /**
+     * Stops a specific worker by setting its `enabled` flag to `false`.
+     * @param workerId The ID of the worker to stop.
+     */
     stopWorkerById: (workerId: string) => void;
+    /**
+     * Disables a specific unit, preventing it from being executed.
+     * @param id The ID of the unit to disable.
+     * @deprecated Use disableWorker or disableProcess instead.
+     */
     disableUnit: (id: string) => void;
+    /**
+     * Enables a specific unit, allowing it to be executed.
+     * @param id The ID of the unit to enable.
+     * @deprecated Use enableWorker or enableProcess instead.
+     */
     enableUnit: (id: string) => void;
+    /**
+     * Enables a specific worker, allowing it to be executed.
+     * @param id The ID of the worker to enable.
+     */
     enableWorker: (workerId: string) => void;
+    /**
+     * Disables a specific worker, preventing it from being executed.
+     * @param id The ID of the worker to disable.
+     */
     disableWorker: (workerId: string) => void;
+    /**
+     * Enables a specific process, allowing it to be executed.
+     * @param id The ID of the process to enable.
+     */
     enableProcess: (processId: string) => void;
+    /**
+     * Disables a specific process, preventing it from being executed.
+     * @param id The ID of the process to disable.
+     */
     disableProcess: (processId: string) => void;
 
-    // Status and querying
+    /**
+     * Retrieves the current status of a unit (e.g., 'idle', 'running').
+     * @param id The ID of the unit.
+     */
     getUnitStatus: (id: string) => SynchronikUnit["status"];
+    /**
+     * Lists all registered units (both workers and processes).
+     * @returns An array of all `SynchronikUnit` objects.
+     */
     listUnits: () => SynchronikUnit[];
+
+    /**
+     * Lists all registered workers.
+     * @returns An array of all `SynchronikWorker` objects.
+     */
     listWorkers?: () => SynchronikWorker[];
+    /**
+     * Lists all registered processes.
+     * @returns An array of all `SynchronikProcess` objects.
+     */
     listProcesses?: () => SynchronikProcess[];
 
     // 🎯 Milestone broadcasting
+    /**
+     * Emits a custom milestone event.
+     * @param id A unique identifier for the milestone.
+     * @param payload Optional data to include with the milestone.
+     */
     emitMilestone: (
         milestoneId: string,
         payload?: Record<string, unknown>
     ) => void;
 
     // 📡 Real-time event subscription
+
+    /**
+     * Subscribes to all events emitted by the engine's event bus.
+     * @param listener A function that will be called with every `SynchronikEvent`.
+     * @returns An `unsubscribe` function to stop listening.
+     */
     subscribeToEvents: (
         listener: (event: SynchronikEvent) => void
     ) => () => void; // returns unsubscribe function
 
     /** Starts the engine's background processes (main loop and watcher). */
     start: () => void;
-    /** Gracefully stops the engine's background processes. */
+
+    /**
+     * Gracefully stops the engine. It clears the background intervals and attempts to complete any in-progress work before exiting.
+     */
     stop: () => Promise<void>;
 
     // Unit Management
@@ -362,6 +443,11 @@ export interface SynchronikManager {
         status: Status,
         options?: { payload?: Record<string, unknown> }
     ) => void;
+
+    /**
+     * Returns a snapshot of all units currently in the registry.
+     * @returns An array of `SynchronikUnit` objects.
+     */
     getRegistrySnapshot: () => SynchronikUnit[];
 
     /**
@@ -383,32 +469,95 @@ export interface SynchronikManager {
      */
     useWorkerPool: (poolSize?: number) => WorkerManager;
 
+    /**
+     * Subscribes to 'milestone' events.
+     * @param handler A function to be called when a milestone is emitted.
+     * @returns An `unsubscribe` function.
+     */
     onMilestone: (
         handler: (
             milestoneId: string,
             payload?: Record<string, unknown>
         ) => void
     ) => () => void;
+
+    /**
+     * Retrieves a snapshot of the engine's current resource consumption.
+     * This includes memory usage for the Node.js process and raw CPU time.
+     *
+     * @returns An object containing memory and CPU usage statistics.
+     * @property memory - Memory usage statistics formatted as strings in MB.
+     * @property memory.rss - "Resident Set Size", the total memory allocated for the process in physical RAM.
+     * @property memory.heapTotal - The total size of the V8 memory heap.
+     * @property memory.heapUsed - The actual memory being used by the application's objects. This is useful for tracking potential memory leaks.
+     * @property memory.external - Memory used by C++ objects bound to JavaScript objects managed by V8.
+     * @property cpu - The CPU usage percentage since the last time this method was called. The first call will return "0.00%".
+     *
+     * @example
+     * const stats = manager.getEngineStats();
+     * console.log(stats);
+     * // {
+     * //   memory: {
+     * //     rss: "45.12 MB",
+     * //     heapTotal: "8.50 MB",
+     * //     heapUsed: "5.73 MB",
+     * //     external: "1.02 MB"
+     * //   },
+     * //   cpu: "12.34%"
+     * // }
+     */
+    getEngineStats: () => {
+        memory: {
+            rss: string;
+            heapTotal: string;
+            heapUsed: string;
+            external: string;
+        };
+        cpu: string;
+    };
 }
 
 /**
  * An in-memory database that stores and manages the state of all registered units.
  */
 export interface SynchronikRegistry {
-    /** Registers a new unit, adding it to the internal maps. */
+    /**
+     * Registers a new unit with the engine.
+     * This adds it to the appropriate internal data structures (units, workers, processes).
+     * @param unit The unit to register.
+     */
     registerUnit: (unit: SynchronikUnit) => void;
-    /** Retrieves a unit by its unique ID. */
+    /**
+     * Retrieves a unit by its ID.
+     * @param id The ID of the unit to retrieve.
+     * @returns The unit, or undefined if not found.
+     */
     getUnitById: (id: string) => SynchronikUnit | undefined;
-    /** Retrieves a worker by its unique ID. */
+    /**
+     * Retrieves a worker by its ID.
+     * @param id The ID of the worker to retrieve.
+     * @returns The worker, or undefined if not found.
+     */
     getWorkerById: (id: string) => SynchronikWorker | undefined;
-    /** Retrieves a process by its unique ID. */
+    /**
+     * Retrieves a process by its ID.
+     * @param id The ID of the process to retrieve.
+     * @returns The process, or undefined if not found.
+     */
     getProcessById: (id: string) => SynchronikProcess | undefined;
 
-    /** Returns an array of all currently registered units. */
+    /**
+     * Lists all currently registered units.
+     * @returns An array of all Synchronik units.
+     */
     listUnits: () => SynchronikUnit[];
-    /** Returns an array of all currently registered workers. */
+    /** List all currently registered workers.
+     * @returns An array of all Synchronik Workers.
+     */
     listWorkers: () => SynchronikWorker[];
-    /** Returns an array of all currently registered processes. */
+    /** List all currently registered processes.
+     *  @returns An array of all Synchronik Processes.
+     */
     listProcesses: () => SynchronikProcess[];
 
     /**
@@ -434,15 +583,26 @@ export interface SynchronikRegistry {
      */
     updateWorkerConfig: UpdateWorkerConfig<SynchronikWorker>;
 
-    /** Removes a unit and its associations from the registry. */
+    /** Removes a unit and its associations from the registry.
+     *  @param id The ID of the unit to release
+     */
     releaseUnit: (id: string) => void;
 
-    /** Retrieves all workers associated with a specific process ID. */
+    /** Retrieves all workers associated with a specific process ID.
+     * @param processId The id of the process.
+     * @returns An array of the process workers.
+     */
     getWorkersForProcess: (processId: string) => SynchronikWorker[];
-    /** Finds all processes that contain a specific worker ID. */
+    /** Finds all processes that contain a specific worker ID.
+     * @param The ID of the worker.
+     * @returns An array of processes the worker is currently attached to.
+     */
     getProcessesForWorker: (workerId: string) => SynchronikProcess[];
 
-    /** Returns all units that currently have the specified status. */
+    /** Returns all units that currently have the specified status.
+     *  @param status The status of the unit to find, e.g "idle", "error"...
+     *  @returns The array of Synchronik units with that status specified.
+     */
     findUnitsByStatus: (status: SynchronikUnit["status"]) => SynchronikUnit[];
 }
 
@@ -476,7 +636,18 @@ export type SynchronikEvent =
  */
 
 export interface MilestoneEmitter {
+    /**
+     * Emits a generic milestone event.
+     * @param milestoneId A unique identifier for the milestone.
+     * @param payload Optional data to include with the event.
+     */
     emit: (milestoneId: string, payload?: Record<string, unknown>) => void;
+    /**
+     * Emits a milestone event specifically for a unit's lifecycle stage (e.g., 'completed', 'released').
+     * @param unitId The ID of the unit.
+     * @param stage The lifecycle stage (e.g., 'completed', 'released').
+     * @param payload Optional data to include with the event.
+     */
     emitForUnit: (
         unitId: string,
         stage: string,
@@ -556,7 +727,11 @@ export interface SynchronikLifecycle {
      * @param id The ID of the unit to release.
      */
     release: (id: string) => void;
-
+    /**
+     * Emits a custom milestone event.
+     * @param milestoneId A unique identifier for the milestone.
+     * @param payload Optional data to include with the milestone.
+     */
     emitMilestone: (
         milestoneId: string,
         payload?: Record<string, unknown>
