@@ -341,6 +341,17 @@ export interface SynchronikManager {
      */
     runProcessById: (processId: string) => Promise<void>;
     /**
+     * Manually triggers a single execution cycle of the main loop.
+     * This will identify and run any eligible units, just as the automatic interval would.
+     * This is highly useful for testing or controlled, non-continuous execution environments.
+     */
+    runLoopOnce: () => Promise<void>;
+    /**
+     * Manually triggers the watcher to scan for stale or unhealthy units.
+     * This is useful for testing the watcher's resilience logic or for administrative actions.
+     */
+    runWatcherScan: () => void;
+    /**
      * Stops a specific worker by setting its `enabled` flag to `false`.
      * @param workerId The ID of the worker to stop.
      */
@@ -384,8 +395,30 @@ export interface SynchronikManager {
      */
     getUnitStatus: (id: string) => SynchronikUnit["status"];
     /**
+     * Retrieves a unit by its ID.
+     * @param id The ID of the unit to retrieve.
+     * @returns The unit, or undefined if not found.
+     */
+    getUnitById: (id: string) => SynchronikUnit | undefined;
+    /**
+     * Retrieves a worker by its ID.
+     * @param id The ID of the worker to retrieve.
+     * @returns The worker, or undefined if not found.
+     */
+    getWorkerById: (id: string) => SynchronikWorker | undefined;
+    /**
+     * Retrieves a process by its ID.
+     * @param id The ID of the process to retrieve.
+     * @returns The process, or undefined if not found.
+     */
+    getProcessById: (id: string) => SynchronikProcess | undefined;
+    /**
      * Lists all registered units (both workers and processes).
+     * This returns an array of references to the live unit objects. For performance, it is not a deep copy.
+     * Modifying objects in the returned array will mutate the engine's state.
+     * For a safe, deep-cloned snapshot, use `getRegistrySnapshot()`.
      * @returns An array of all `SynchronikUnit` objects.
+     *
      */
     listUnits: () => SynchronikUnit[];
 
@@ -393,12 +426,12 @@ export interface SynchronikManager {
      * Lists all registered workers.
      * @returns An array of all `SynchronikWorker` objects.
      */
-    listWorkers?: () => SynchronikWorker[];
+    listWorkers: () => SynchronikWorker[];
     /**
      * Lists all registered processes.
      * @returns An array of all `SynchronikProcess` objects.
      */
-    listProcesses?: () => SynchronikProcess[];
+    listProcesses: () => SynchronikProcess[];
 
     // 🎯 Milestone broadcasting
     /**
@@ -445,8 +478,10 @@ export interface SynchronikManager {
     ) => void;
 
     /**
-     * Returns a snapshot of all units currently in the registry.
-     * @returns An array of `SynchronikUnit` objects.
+     * Returns a deep copy (a true snapshot) of all units currently in the registry.
+     * This is safe to mutate without affecting the live engine state.
+     * For a faster, read-only list of live unit references, use `listUnits()`.
+     * @returns A deep-cloned array of `SynchronikUnit` objects.
      */
     getRegistrySnapshot: () => SynchronikUnit[];
 
@@ -479,6 +514,33 @@ export interface SynchronikManager {
             milestoneId: string,
             payload?: Record<string, unknown>
         ) => void
+    ) => () => void;
+
+    /**
+     * Subscribes specifically to 'start' events.
+     * @param handler A function to be called when a unit starts.
+     * @returns An `unsubscribe` function.
+     */
+    onStart: (
+        handler: (event: Extract<SynchronikEvent, { type: "start" }>) => void
+    ) => () => void;
+
+    /**
+     * Subscribes specifically to 'complete' events.
+     * @param handler A function to be called when a unit completes successfully.
+     * @returns An `unsubscribe` function.
+     */
+    onComplete: (
+        handler: (event: Extract<SynchronikEvent, { type: "complete" }>) => void
+    ) => () => void;
+
+    /**
+     * Subscribes specifically to 'error' events.
+     * @param handler A function to be called when a unit fails.
+     * @returns An `unsubscribe` function.
+     */
+    onError: (
+        handler: (event: Extract<SynchronikEvent, { type: "error" }>) => void
     ) => () => void;
 
     /**

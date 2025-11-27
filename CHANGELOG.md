@@ -5,9 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.2.0] - 2025-11-27
+
+### ✨ Added (v2.2.0)
+
+- **Enhanced Manager API**:
+  - **Direct Accessors**: Added `getUnitById`, `getWorkerById`, and `getProcessById` for direct and convenient access to registered units.
+  - **Manual Triggers**: Added `runLoopOnce()` and `runWatcherScan()` to manually trigger core background processes, improving testability and control.
+  - **Convenient Event Subscriptions**: Added `onStart`, `onComplete`, and `onError` methods for cleaner, type-safe event handling.
+
+### ♻️ Changed (v2.2.0)
+
+- **Predictable Event Payloads**:
+  - All system-generated milestone events (e.g., for status changes, registration, release) now include a rich, consistent payload containing the full unit object and a `reason` field. This eliminates the need to parse `milestoneId` strings.
+- **True Snapshot with `getRegistrySnapshot`**:
+  - The `manager.getRegistrySnapshot()` method now performs a deep clone of the registry state, providing a true, isolated snapshot that is safe to mutate without affecting the live engine. Function properties are correctly omitted to prevent cloning errors.
+
+### 🐛 Fixed (v2.2.0)
+
+- Resolved a `DataCloneError` in `getRegistrySnapshot` by ensuring non-serializable function properties are omitted before cloning.
+- Corrected an API inconsistency where `listWorkers` and `listProcesses` were incorrectly marked as optional in the `SynchronikManager` type definition.
+
+---
+
 ## [v2.1.0] - 2025-11-27
 
-### ✨ Added
+### ✨ Added (v2.1.0)
 
 - **Worker Performance Metrics**:
   - The engine now automatically calculates and stores performance metrics on each worker's `meta` object upon successful completion.
@@ -20,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added a new `statsEmissionIntervalMs` option to `createSynchronikManager`.
   - When set, the manager will automatically emit the engine's resource stats on a regular interval via a new `engine:stats` milestone.
 
-### ♻️ Changed
+### ♻️ Changed (v2.1.0)
 
 - **Enriched `completed` Event Payload**: The milestone event for a worker's `completed` status now includes a `durationMs` property in its payload, providing immediate access to the last run's execution time.
 

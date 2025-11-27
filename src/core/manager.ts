@@ -232,6 +232,14 @@ export function createSynchronikManager(options?: {
             });
         },
 
+        runLoopOnce(): Promise<void> {
+            return loop.run();
+        },
+
+        runWatcherScan(): void {
+            watcher.scan();
+        },
+
         disableUnit: (id) => lifecycle.update(id, { enabled: false }),
 
         disableWorker: (id) => lifecycle.update(id, { enabled: false }),
@@ -249,6 +257,15 @@ export function createSynchronikManager(options?: {
             return unit?.status;
         },
 
+        getUnitById(id: string): SynchronikUnit | undefined {
+            return registry.getUnitById(id);
+        },
+        getWorkerById(id: string): SynchronikWorker | undefined {
+            return registry.getWorkerById(id);
+        },
+        getProcessById(id: string): SynchronikProcess | undefined {
+            return registry.getProcessById(id);
+        },
         listUnits(): SynchronikUnit[] {
             return registry.listUnits();
         },
@@ -288,13 +305,36 @@ export function createSynchronikManager(options?: {
         },
 
         getRegistrySnapshot() {
-            return registry.listUnits();
+            const units = registry.listUnits();
+            return units.map((unit) => {
+                // Create a cloneable version of the unit by omitting functions
+                const cloneableUnit: Record<string, any> = {};
+                for (const key in unit) {
+                    const value = (unit as any)[key];
+                    if (typeof value !== "function") {
+                        cloneableUnit[key] = value;
+                    }
+                }
+                return structuredClone(cloneableUnit) as SynchronikUnit;
+            });
         },
 
         onMilestone(handler) {
             return eventBus.subscribe("milestone", (event) => {
                 handler(event.milestoneId, event.payload);
             });
+        },
+
+        onStart(handler) {
+            return eventBus.subscribe("start", handler);
+        },
+
+        onComplete(handler) {
+            return eventBus.subscribe("complete", handler);
+        },
+
+        onError(handler) {
+            return eventBus.subscribe("error", handler);
         },
 
         useWorkerPool(poolSize: number = 5): WorkerManager {
