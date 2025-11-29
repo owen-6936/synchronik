@@ -1,45 +1,61 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createSynchronikRegistry } from "../../core/registry";
+import { ReactiveRegistry } from "../../core/ReactiveRegistry";
 import { createSynchronikLifecycle } from "../../core/lifecycle";
 import { SynchronikEventBus } from "../../core/event";
 import { createMilestoneEmitter } from "../../core/event";
-import type { SynchronikWorker } from "../../types/synchronik";
+import type {
+    SynchronikProcess,
+    SynchronikWorker,
+} from "../../types/synchronik";
 
 describe("SynchronikLifecycle", () => {
-    let registry: ReturnType<typeof createSynchronikRegistry>;
+    let registry: ReactiveRegistry;
     let eventBus: SynchronikEventBus;
     let emitter: ReturnType<typeof createMilestoneEmitter>;
     let lifecycle: ReturnType<typeof createSynchronikLifecycle>;
     let events: any[];
 
-    const mockWorker = (id: string): SynchronikWorker => ({
+    const mockWorker = (id: string, enabled = true): SynchronikWorker => ({
         id,
         status: "idle",
         run: vi.fn(),
         name: "Mock Worker",
-        enabled: true,
+        enabled,
+    });
+
+    const mockProcess = (
+        id: string,
+        workers: SynchronikWorker[],
+        enabled = true
+    ): SynchronikProcess => ({
+        id,
+        status: "idle",
+        name: "Mock Process",
+        enabled,
+        workers,
     });
 
     beforeEach(() => {
-        registry = createSynchronikRegistry();
         eventBus = new SynchronikEventBus();
         emitter = createMilestoneEmitter(eventBus);
+        registry = new ReactiveRegistry(eventBus);
         lifecycle = createSynchronikLifecycle(registry, eventBus, emitter);
         events = [];
         eventBus.subscribeAll((e) => events.push(e));
     });
 
-    it("updates unit status and emits milestone", () => {
+    it("updates unit status and emits an 'updated' event", () => {
         const w = mockWorker("w1");
         registry.registerUnit(w);
 
         lifecycle.update("w1", { status: "running" });
         expect(registry.getUnitById("w1")?.status).toBe("running");
 
-        lifecycle.emitMilestone("unit:w1:started", { foo: "bar" });
-        expect(events.some((e) => e.milestoneId === "unit:w1:started")).toBe(
-            true
+        const updateEvent = events.find(
+            (e) => e.type === "updated" && e.unitId === "w1"
         );
+        expect(updateEvent).toBeDefined();
+        expect(updateEvent.payload.reason).toBe("status-change");
     });
 
     it("releases unit and removes it from registry", () => {
@@ -86,5 +102,69 @@ describe("SynchronikLifecycle", () => {
         expect(registry.getUnitById("w4")?.lastRun?.toISOString()).toBe(
             "2025-11-07T10:00:00.000Z"
         );
+    });
+
+    it("can disable and enable a worker via update", () => {
+        const w = mockWorker("w5", true);
+        registry.registerUnit(w);
+        expect(registry.getUnitById("w5")?.enabled).toBe(true);
+
+        // Disable
+        lifecycle.update("w5", { enabled: false });
+        expect(registry.getUnitById("w5")?.enabled).toBe(false);
+
+        // Enable
+        lifecycle.update("w5", { enabled: true });
+        expect(registry.getUnitById("w5")?.enabled).toBe(true);
+    });
+
+    it("can disable and enable a process via update", () => {
+        const p = mockProcess("p1", [], true);
+        registry.registerUnit(p);
+        expect(registry.getUnitById("p1")?.enabled).toBe(true);
+
+        // Disable
+        lifecycle.update("p1", { enabled: false });
+        expect(registry.getUnitById("p1")?.enabled).toBe(false);
+
+        // Enable
+        lifecycle.update("p1", { enabled: true });
+        expect(registry.getUnitById("p1")?.enabled).toBe(true);
+    });
+
+    it("emits an 'updated' event on any configuration change", () => {
+        const w = mockWorker("w-config");
+        registry.registerUnit(w);
+
+        // Change a configuration property other than 'enabled'
+        lifecycle.update("w-config", { name: "A New Name" });
+
+        // Expect an 'updated' event to be emitted
+        const updateEvent = events.find((e) => e.type === "updated");
+        expect(updateEvent).toBeDefined();
+        expect(updateEvent?.unitId).toBe("w-config");
+        expect(updateEvent?.payload.reason).toBe("config-change");
+        expect(updateEvent?.payload.name).toBe("A New Name");
+    });
+
+    it("emits a single 'updated' event for combined status and config changes", () => {
+        const w = mockWorker("w-combo");
+        registry.registerUnit(w);
+
+        // Update both status and a config property in one call
+        lifecycle.update("w-combo", {
+            status: "running",
+            name: "New Combo Name",
+        });
+
+        // Find all 'updated' events for this specific worker
+        const updateEvents = events.filter(
+            (e) => e.type === "updated" && e.unitId === "w-combo"
+        );
+
+        // Assert that exactly one event was emitted
+        expect(updateEvents).toHaveLength(1);
+        expect(updateEvents[0].payload.reason).toBe("status-change"); // Status change takes priority
+        expect(updateEvents[0].payload.name).toBe("New Combo Name");
     });
 });

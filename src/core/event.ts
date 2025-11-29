@@ -47,6 +47,7 @@ export class SynchronikEventBus {
             "complete",
             "error",
             "milestone",
+            "updated",
         ];
         types.forEach((type) => this.emitter.on(type, listener));
         return () => types.forEach((type) => this.emitter.off(type, listener));

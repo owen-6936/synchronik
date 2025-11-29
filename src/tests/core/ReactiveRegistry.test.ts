@@ -30,7 +30,7 @@ describe("ReactiveRegistry", () => {
             subscribe: vitest.fn(),
             subscribeAll: vitest.fn(),
         };
-        registry = new ReactiveRegistry(mockMilestoneEmitter, mockEventBus);
+        registry = new ReactiveRegistry(mockEventBus);
     });
 
     it("should set the status of a unit", () => {
@@ -183,7 +183,7 @@ describe("ReactiveRegistry - Performance Metrics", () => {
             subscribe: vitest.fn(),
             subscribeAll: vitest.fn(),
         };
-        registry = new ReactiveRegistry(mockMilestoneEmitter, mockEventBus);
+        registry = new ReactiveRegistry(mockEventBus);
 
         // Use fake timers to control time during tests
         vitest.useFakeTimers();
@@ -228,13 +228,11 @@ describe("ReactiveRegistry - Performance Metrics", () => {
         expect(updatedWorker.meta?.executionTimesMs).toEqual([100, 200]);
         expect(updatedWorker.meta?.averageExecutionTimeMs).toBe(150); // (100 + 200) / 2
 
-        expect(mockMilestoneEmitter.emitForUnit).toHaveBeenCalledWith(
-            workerId,
-            "completed",
+        expect(mockEventBus.emit).toHaveBeenCalledWith(
             expect.objectContaining({
-                previous: "running",
-                current: "completed",
-                durationMs: 200,
+                type: "updated",
+                unitId: workerId,
+                payload: expect.objectContaining({ reason: "status-change" }),
             })
         );
     });

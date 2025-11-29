@@ -57,7 +57,7 @@ export function createSynchronikRegistry(): SynchronikRegistry {
             return Array.from(processes.values());
         },
 
-        updateUnitState<T extends SynchronikUnit>(
+        async updateUnitState<T extends SynchronikUnit>(
             id: string,
             updates: Partial<T>
         ) {
@@ -71,14 +71,14 @@ export function createSynchronikRegistry(): SynchronikRegistry {
             if ("workers" in unit) processes.set(id, unit as SynchronikProcess);
         },
 
-        updateWorkerConfig(workerId, config) {
+        async updateWorkerConfig(workerId, config) {
             const worker = workers.get(workerId);
             if (!worker) return;
 
             Object.assign(worker, config);
             workers.set(workerId, worker);
         },
-        updateProcessConfig(processId, config) {
+        async updateProcessConfig(processId, config) {
             const process = processes.get(processId);
             if (!process) return;
 

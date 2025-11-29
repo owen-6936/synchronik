@@ -26,22 +26,8 @@ export function createSynchronikLifecycle(
             eventBus.emit({ type: "start", unitId: unit.id });
         },
 
-        update(id, updates) {
-            const { status, error, ...rest } = updates;
-            registry.updateUnitState(id, { status, error, ...rest });
-
-            if (status === "error") {
-                eventBus.emit({
-                    type: "error",
-                    unitId: id,
-                    error: error || new Error(`Unit ${id} entered error state`),
-                });
-            } else if (status === "completed") {
-                eventBus.emit({
-                    type: "complete",
-                    unitId: id,
-                });
-            }
+        async update(id, updates) {
+            await registry.updateUnitState(id, updates);
         },
 
         release(id) {

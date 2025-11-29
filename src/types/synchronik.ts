@@ -308,6 +308,26 @@ export type UpdateProcessConfig<T extends SynchronikProcess> = (
 ) => void;
 
 /**
+ * Asynchronously updates the configuration of a registered unit at runtime.
+ * @param workerId The ID of the unit to update.
+ * @param config A partial object of the unit's properties to update.
+ */
+export type AsyncUpdateWorkerConfig<T extends SynchronikUnit> = (
+    workerId: string,
+    config: Partial<T>
+) => Promise<void>;
+
+/**
+ * Asynchronously updates the configuration of a registered process at runtime.
+ * @param processId The ID of the process to update.
+ * @param config A partial object of the process's properties to update
+ */
+export type AsyncUpdateProcessConfig<T extends SynchronikProcess> = (
+    processId: string,
+    config: Partial<T>
+) => Promise<void>;
+
+/**
  * The primary public interface for interacting with the Synchronik engine.
  */
 export interface SynchronikManager {
@@ -472,10 +492,11 @@ export interface SynchronikManager {
      * @param options Optional parameters, including a payload for the emitted milestone.
      */
     updateStatus: (
+        // This is now async
         unitId: string,
         status: Status,
         options?: { payload?: Record<string, unknown> }
-    ) => void;
+    ) => Promise<void>;
 
     /**
      * Returns a deep copy (a true snapshot) of all units currently in the registry.
@@ -490,13 +511,19 @@ export interface SynchronikManager {
      * @param processId The ID of the process to update.
      * @param config A partial object of the process's properties to update.
      */
-    updateProcessConfig: UpdateProcessConfig<SynchronikProcess>;
+    updateProcessConfig: AsyncUpdateProcessConfig<SynchronikProcess>;
     /**
      * Updates the configuration of a registered worker at runtime.
      * @param workerId The ID of the worker to update.
      * @param config A partial object of the worker's properties to update.
      */
-    updateWorkerConfig: UpdateWorkerConfig<SynchronikWorker>;
+    updateWorkerConfig: AsyncUpdateWorkerConfig<SynchronikWorker>;
+
+    /**
+     * Creates and integrates a worker pool manager.
+     * @param poolSize - The number of concurrent workers in the pool.
+     */
+    useStorage: (adapter: StorageAdapter) => Promise<void>;
 
     /**
      * Creates and integrates a worker pool manager.
@@ -627,23 +654,24 @@ export interface SynchronikRegistry {
      * @param id The ID of the unit to update.
      * @param updates A partial object of the unit's properties to update.
      */
-    updateUnitState: <T extends SynchronikUnit>(
+    updateUnitState: <T extends SynchronikUnit>( // This is now async
         id: string,
-        updates: Partial<T>
-    ) => void;
+        updates: Partial<T>,
+        _isHydration?: boolean
+    ) => Promise<void>;
 
     /**
      * Updates the configuration of a registered process at runtime.
      * @param processId The ID of the process to update.
      * @param config A partial object of the process's properties to update
      */
-    updateProcessConfig: UpdateProcessConfig<SynchronikProcess>;
-    /**
+    updateProcessConfig: AsyncUpdateProcessConfig<SynchronikProcess>;
+    /** // This is now async
      * Updates the configuration of a registered unit at runtime.
      * @param workerId The ID of the unit to update.
      * @param config A partial object of the unit's properties to update.
      */
-    updateWorkerConfig: UpdateWorkerConfig<SynchronikWorker>;
+    updateWorkerConfig: AsyncUpdateWorkerConfig<SynchronikWorker>;
 
     /** Removes a unit and its associations from the registry.
      *  @param id The ID of the unit to release
@@ -690,6 +718,11 @@ export type SynchronikEvent =
     | {
           type: "milestone";
           milestoneId: string;
+          payload?: Record<string, unknown>;
+      }
+    | {
+          type: "updated";
+          unitId: string;
           payload?: Record<string, unknown>;
       };
 
@@ -778,12 +811,7 @@ export interface SynchronikLifecycle {
      * @param id The ID of the unit to update.
      * @param updates A partial object of properties to update.
      */
-    update: (
-        id: string,
-        updates: Partial<
-            Pick<SynchronikUnit, "status" | "lastRun" | "enabled">
-        > & { error?: Error | undefined }
-    ) => void;
+    update: <T extends SynchronikUnit>(id: string, updates: Partial<T>) => void;
     /**
      * Releases a unit from the engine, removing it from the registry.
      * @param id The ID of the unit to release.
@@ -825,4 +853,14 @@ export interface SynchronikDashboard {
     showUnitStatus: (unitId: string) => void;
     showMilestoneArc: (unitId: string) => void;
     triggerBadgeGlow: (unitId: string, badge: string) => void;
+}
+
+/**
+ * Defines the contract for persisting and retrieving the engine's state.
+ */
+export interface StorageAdapter {
+    /** Saves the current state of all units to the persistent storage. */
+    saveState(units: SynchronikUnit[]): Promise<void>;
+    /** Loads the state of all units from the persistent storage. */
+    loadState(): Promise<SynchronikUnit[] | null>;
 }

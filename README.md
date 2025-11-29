@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/License-Apache--2.0-green)](LICENSE)
 [![CI](https://github.com/owen-6936/synchronik/actions/workflows/ci.yml/badge.svg)](https://github.com/owen-6936/synchronik/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/owen-6936/synchronik/actions/workflows/codeql.yml/badge.svg)](https://github.com/owen-6936/synchronik/actions/workflows/codeql.yml)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/owen-6936/synchronik/publish.yml?branch=release/v2.1.0)](https://github.com/owen-6936/synchronik/actions/workflows/publish.yml)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/owen-6936/synchronik/publish.yml?branch=release/v2.3.0)](https://github.com/owen-6936/synchronik/actions/workflows/publish.yml)
 [![JSR](https://jsr.io/badges/@nexicore/synchronik)](https://jsr.io/@nexicore/synchronik)
 ![npm version](https://img.shields.io/npm/v/synchronik)
 
@@ -31,6 +31,7 @@ Whether you're coordinating data pipelines, managing background jobs, or buildin
 * **Event-Driven Architecture:** Subscribe to the entire lifecycle of your tasks. React to `start`, `complete`, `error`, and custom `milestone` events in real-time.
 * **Built-in Performance & Resource Monitoring:** Automatically track worker execution times and monitor the engine's CPU and memory usage.
 * **Resilience and Retries:** Configure automatic retries with exponential backoff for workers, making your workflows fault-tolerant.
+* **State Persistence & Hydration:** Save the engine's state to a file and automatically reload it on restart, making workflows resilient to crashes and deployments.
 * **Flexible Run Modes:** Execute workers `sequentially`, in `parallel`, in `batched` groups, or `isolated` with delays.
 * **Automatic & Manual Control:** Run tasks on a scheduled interval or trigger them manually via a clean API.
 
@@ -46,6 +47,8 @@ Modern Node.js applications often involve complex asynchronous operations that c
   * **✅ Solution:** The event-driven architecture emits events for every lifecycle change, while built-in monitoring provides live insights into performance and resource usage.
 * **❌ Problem: Handling Failures and Retries is Repetitive.**
   * **✅ Solution:** Define `maxRetries` and `retryDelayMs` on your workers, and the engine handles the rest, complete with `onError` hooks for final failure states.
+* **❌ Problem: Server Restarts or Crashes Lose All Progress.**
+  * **✅ Solution:** The new State Persistence feature saves the engine's state to a file, allowing it to "remember" the status of all workflows and resume exactly where it left off.
 
 ---
 
@@ -90,6 +93,51 @@ await manager.runWorkerById('daily-report-worker');
 // 5. Clean up
 await manager.stop();
 ```
+
+---
+
+## 💾 State Persistence & Hydration
+
+A core feature of a production-grade workflow engine is resilience. The Synchronik engine achieves this through its **State Persistence and Hydration** mechanism. This allows the engine to save its entire state to a persistent storage and reload it upon restart, ensuring that no progress is lost.
+
+### How It Works: The Storage Adapter
+
+The feature is designed around a simple `StorageAdapter` interface. Synchronik ships with a default `FileStorageAdapter` that saves the engine's state to a local JSON file.
+
+1. **Initialization & Hydration**: When you initialize the manager with a storage adapter, it first calls `adapter.loadState()`. If state is found, the manager "hydrates" itself, merging the persisted data (like `status`, `meta`, `runCount`) into the worker and process definitions that have been registered in your code.
+2. **Automatic Saving**: After hydration, any action that changes the state of a unit (e.g., a worker's status changing or a configuration update) will automatically trigger a call to `adapter.saveState()`, persisting the new state.
+
+### Usage
+
+Using the persistence feature is straightforward.
+
+1. Import `createSynchronikManager` and `FileStorageAdapter`.
+2. Create an instance of the manager and the adapter.
+3. **Register your units first.** This is crucial because the adapter only saves data, not functions. The `run` methods must be available in memory for hydration to work.
+4. Call `await manager.useStorage(adapter)`.
+
+```typescript
+import { createSynchronikManager } from 'synchronik';
+import { FileStorageAdapter } from 'synchronik'; // Adjust path as needed
+
+const manager = createSynchronikManager();
+const adapter = new FileStorageAdapter("my-app-state.json");
+
+// 1. Register all your workers and processes
+manager.registerUnit(myWorker);
+
+// 2. Initialize storage. This will load the state from the file if it exists.
+await manager.useStorage(adapter);
+
+// Now the manager is ready, with its state restored from the last run.
+manager.start();
+```
+
+### Benefits
+
+* **Resilience**: Your workflows can survive server crashes and restarts.
+* **Zero-Downtime Deployments**: A new server process can be deployed and will pick up the state exactly where the old one left off.
+* **Scalability Foundation**: While the `FileStorageAdapter` is for single-node persistence, you can implement a custom adapter (e.g., for Redis or a database) to enable a multi-node, horizontally-scaled architecture.
 
 ---
 
@@ -153,11 +201,12 @@ The Synchronik engine is built around a modular architecture orchestrated by a c
 | Component | File (`src/core/`) | Role |
 | :--- | :--- | :--- |
 | **Manager** | `manager.ts` | The main public interface. It integrates all other components and provides the high-level API for controlling the engine. |
-| **Reactive Registry** | `ReactiveRegistry.ts` | A reactive, in-memory database that stores unit state and automatically handles status propagation and event emission. |
+| **Reactive Registry** | `ReactiveRegistry.ts` | A reactive, in-memory database that stores unit state and automatically handles status propagation, event emission, and state persistence. |
 | **Lifecycle** | `lifecycle.ts` | Manages the registration and release of units, ensuring state changes are valid. |
 | **Event Bus** | `event.ts` | A publish-subscribe system that broadcasts events (`start`, `complete`, `error`, `milestone`) across the engine. |
 | **Loop** | `loop.ts` | The heart of automatic execution. It runs on a configurable interval, identifies idle units, and executes them. |
 | **Watcher** | `watcher.ts` | A background process that scans for stale or stuck units to ensure engine health and resilience. |
+| **Storage Adapter** | `storage/FileStorageAdapter.ts` | Handles saving and loading the engine's state to a persistent medium (e.g., a file), enabling resilience across restarts. |
 | **Dashboard** | `dashboard.ts` | An optional console utility for visualizing the state of the engine in real-time. |
 
 ---
@@ -229,16 +278,18 @@ These methods allow you to add, remove, and inspect units in the engine:
     manager.releaseUnit('my-first-worker');
     ```
 
-* `manager.updateWorkerConfig(workerId, config)` / `manager.updateProcessConfig(processId, config)`: Updates the configuration of a registered unit at runtime.
+* `manager.updateWorkerConfig(workerId, config)` / `manager.updateProcessConfig(processId, config)`: **Asynchronously** updates the configuration of a registered unit at runtime.
 
     ```typescript
-    manager.updateWorkerConfig('data-ingestion-worker', { maxRetries: 5 });
+    // This method is now async and should be awaited
+    await manager.updateWorkerConfig('data-ingestion-worker', { maxRetries: 5 });
     ```
 
-* `manager.updateStatus(unitId, status)`: Manually sets the status of a unit (e.g., resetting a failed worker to `idle`).
+* `manager.updateStatus(unitId, status)`: **Asynchronously** sets the status of a unit (e.g., resetting a failed worker to `idle`).
 
     ```typescript
-    manager.updateStatus('failing-worker', 'idle');
+    // This method is now async and should be awaited
+    await manager.updateStatus('failing-worker', 'idle');
     ```
 
 * `manager.listUnits()`: Returns an array of all currently registered units.
@@ -259,7 +310,7 @@ Trigger workers or processes manually outside of the main execution loop:
 * `manager.runWorkerById(id)`: Immediately executes a single worker by its ID.
 
     ```typescript
-    await manager.runUnitById('my-first-worker');
+    await manager.runWorkerById('my-first-worker');
     ```
 
 * `manager.runProcessById(id)`: Executes a process and all of its associated workers.
@@ -312,6 +363,7 @@ You can find runnable code examples in the `examples/` directory. These provide 
 * **`7-dynamic-health-monitor.ts`**: An advanced health monitor that uses a `WorkerPool` to dynamically queue and execute health checks efficiently.
 * **`8-status-tracker-usage.ts`**: Demonstrates how to use the status tracker to monitor and react to unit status changes.
 * **`9-dependency-graph-usage.ts`**: Demonstrates the powerful `dependsOn` feature to create complex, conditional workflows.
+* **`10-persistent-engine.ts`**: A real-world demonstration of the State Persistence feature, showing how the engine can remember its state across restarts.
 
 ---
 
@@ -330,6 +382,7 @@ synchronik/
 │   │   ├── event.ts
 │   │   ├── loop.ts
 │   │   ├── watcher.ts
+│   │   ├── FileStorageAdapter.ts
 │   │   └── dashboard.ts
 │   ├── types/
 │   │   ├── index.ts
