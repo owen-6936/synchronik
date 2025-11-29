@@ -514,6 +514,61 @@ describe("SynchronikManager - Fierce Testing", () => {
         );
         expect(configUpdateEvent).toBeDefined();
     });
+
+    it("should update a worker in a process and verify the change from the parent", async () => {
+        // 1. Define the initial worker with a rich configuration
+        const initialWorker: SynchronikWorker = {
+            id: "config-integrity-worker",
+            name: "Config Integrity Worker",
+            enabled: true,
+            status: "idle",
+            run: vi.fn().mockResolvedValue("done"), // The run function itself
+            meta: { version: 1, author: "test" },
+            maxRetries: 3,
+            retryDelayMs: 100,
+        };
+
+        // 2. Define a process that contains this worker
+        const process: SynchronikProcess = {
+            id: "config-integrity-process",
+            name: "Config Integrity Process",
+            enabled: true,
+            workers: [initialWorker],
+        };
+
+        const manager = createSynchronikManager();
+        // 3. Register the process, which also registers the worker and assigns its processId
+        manager.registerUnit(process);
+        expect(initialWorker.processId).toBe("config-integrity-process");
+
+        // 4. Get a "before" snapshot of the worker
+        const { run: _, ...beforeState } = manager.getUnitById(
+            "config-integrity-worker"
+        ) as SynchronikWorker;
+
+        // 5. Update a single property on the worker using only its ID
+        await manager.updateWorkerConfig("config-integrity-worker", {
+            enabled: false,
+        });
+
+        // 6. Get the updated worker and use its processId to find the parent process
+        const updatedWorker = manager.getUnitById(
+            "config-integrity-worker"
+        ) as SynchronikWorker;
+        expect(updatedWorker.processId).toBe("config-integrity-process");
+
+        const parentProcess = manager.getUnitById(
+            updatedWorker.processId!
+        ) as SynchronikProcess;
+        const workerFromProcess = parentProcess.workers.find(
+            (w) => w.id === "config-integrity-worker"
+        )!;
+
+        // 7. Assert the change and the integrity of other properties on the worker found inside the process
+        const { run: __, ...afterState } = workerFromProcess;
+        expect(afterState.enabled).toBe(false); // The change was applied
+        expect({ ...afterState, enabled: true }).toEqual(beforeState); // All other properties are identical
+    });
 });
 
 describe("SynchronikManager - State Persistence", () => {

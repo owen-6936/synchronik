@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.3.2] - 2025-11-29
+
+### 🐛 Fixed (v2.3.2)
+
+- **Correct `processId` Assignment**: Fixed a critical bug where workers registered as part of a process were not having their `processId` correctly assigned upon registration. This ensures the parent-child relationship is established immediately and reliably.
+
+---
+
 ## [v2.3.1] - 2025-11-29
 
 ### 🐛 Fixed (v2.3.1)
