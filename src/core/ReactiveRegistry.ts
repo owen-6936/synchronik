@@ -34,7 +34,12 @@ export class ReactiveRegistry implements SynchronikRegistry {
      * Registers a new unit (worker or process) with the registry.
      * @param unit The unit to register.
      */
-    registerUnit(unit: SynchronikUnit): void {
+    registerUnit(unit: SynchronikUnit, processId?: string): void {
+        // If a processId is provided, assign it to the unit (which must be a worker).
+        if (processId && "run" in unit) {
+            (unit as SynchronikWorker).processId = processId;
+        }
+
         this.units.set(unit.id, unit);
         if ("run" in unit) {
             this.workers.set(unit.id, unit as SynchronikWorker);
@@ -42,7 +47,10 @@ export class ReactiveRegistry implements SynchronikRegistry {
         if ("workers" in unit) {
             const process = unit as SynchronikProcess;
             this.processes.set(unit.id, process);
-            process.workers.forEach((worker) => this.registerUnit(worker));
+            // Pass the process's ID down to its workers during registration.
+            process.workers.forEach((worker) =>
+                this.registerUnit(worker, process.id)
+            );
         }
     }
 
