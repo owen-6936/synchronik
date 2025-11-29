@@ -482,6 +482,9 @@ describe("SynchronikManager - Fierce Testing", () => {
         };
 
         const manager = createSynchronikManager();
+        const events: any[] = [];
+        manager.subscribeToEvents((event) => events.push(event));
+
         manager.registerUnit(p);
 
         // 2. Start the process. Don't await it yet.
@@ -490,6 +493,7 @@ describe("SynchronikManager - Fierce Testing", () => {
         // 3. Immediately (while w1 is "running"), update the config of w2.
         await manager.updateWorkerConfig("hot-swap-w2", {
             meta: { original: false, updated: true },
+            enabled: false,
         });
 
         // 4. Now, await the process completion.
@@ -499,6 +503,16 @@ describe("SynchronikManager - Fierce Testing", () => {
         const finalW2 = manager.getUnitById("hot-swap-w2");
         expect(finalW2?.meta?.original).toBe(false);
         expect(finalW2?.meta?.updated).toBe(true);
+        expect(finalW2?.enabled).toBe(false);
+
+        // Assert that a specific 'config-update' event was emitted for the worker.
+        const configUpdateEvent = events.find(
+            (e) =>
+                e.type === "updated" &&
+                e.payload?.reason === "config-change" &&
+                e.unitId === "hot-swap-w2"
+        );
+        expect(configUpdateEvent).toBeDefined();
     });
 });
 

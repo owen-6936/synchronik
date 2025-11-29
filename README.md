@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/License-Apache--2.0-green)](LICENSE)
 [![CI](https://github.com/owen-6936/synchronik/actions/workflows/ci.yml/badge.svg)](https://github.com/owen-6936/synchronik/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/owen-6936/synchronik/actions/workflows/codeql.yml/badge.svg)](https://github.com/owen-6936/synchronik/actions/workflows/codeql.yml)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/owen-6936/synchronik/publish.yml?branch=release/v2.3.0)](https://github.com/owen-6936/synchronik/actions/workflows/publish.yml)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/owen-6936/synchronik/publish.yml?branch=release/v2.3.1)](https://github.com/owen-6936/synchronik/actions/workflows/publish.yml)
 [![JSR](https://jsr.io/badges/@nexicore/synchronik)](https://jsr.io/@nexicore/synchronik)
 ![npm version](https://img.shields.io/npm/v/synchronik)
 

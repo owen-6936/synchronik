@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.3.1] - 2025-11-29
+
+### 🐛 Fixed (v2.3.1)
+
+- **Reliable Configuration Change Events**: Fixed a critical bug in the `ReactiveRegistry` where configuration changes (e.g., updating `meta`, or disabling a worker via `updateWorkerConfig`) were not being detected. This ensures that an `updated` event with `reason: 'config-change'` is now reliably emitted for all relevant configuration modifications.
+- **Corrected Change-Detection Logic**: The internal mechanism for detecting state changes now uses a proper deep snapshot of the unit's configuration before an update, guaranteeing accurate comparisons and event emission.
+
+---
+
 ## [v2.3.0] - 2025-11-29
 
 ### ✨ Added (v2.3.0)

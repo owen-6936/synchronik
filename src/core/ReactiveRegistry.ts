@@ -84,8 +84,8 @@ export class ReactiveRegistry implements SynchronikRegistry {
 
         // Create a snapshot of configuration properties before the update.
         // We exclude runtime state like 'status' and 'lastRun'.
-        const { status: _, lastRun: __, ...configBefore } = unit;
-        const configBeforeJson = JSON.stringify(configBefore);
+        const { run: _, ...cloneablePart } = unit as any;
+        const configBeforeJson = JSON.stringify(cloneablePart);
 
         const oldStatus = unit.status;
         Object.assign(unit, updates);
@@ -125,8 +125,8 @@ export class ReactiveRegistry implements SynchronikRegistry {
         }
 
         // Compare the configuration snapshot to detect any changes.
-        const { status: ___, lastRun: ____, ...configAfter } = unit;
-        const configAfterJson = JSON.stringify(configAfter);
+        const { run: __, ...cloneableUnitAfter } = unit as any; // Exclude the run function for a correct comparison
+        const configAfterJson = JSON.stringify(cloneableUnitAfter); // Stringify the cloneable part
 
         const statusChanged = newStatus && newStatus !== oldStatus;
         const configChanged = configBeforeJson !== configAfterJson;
@@ -143,8 +143,8 @@ export class ReactiveRegistry implements SynchronikRegistry {
                     type: "updated",
                     unitId: id,
                     payload: {
-                        ...unit,
-                        reason,
+                        ...unit, // Spread the unit properties first
+                        reason, // Then explicitly set our event-specific properties
                         previous: oldStatus,
                         current: newStatus,
                     },

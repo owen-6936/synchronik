@@ -140,7 +140,10 @@ export function createSynchronikManager(options?: {
 
             if (statsEmissionIntervalMs) {
                 statsInterval = setInterval(() => {
-                    const stats = this.getEngineStats();
+                    milestoneEmitter.emit(
+                        "engine:stats",
+                        this.getEngineStats()
+                    );
                 }, statsEmissionIntervalMs);
             }
         },
@@ -414,10 +417,10 @@ export function createSynchronikManager(options?: {
             });
         },
         updateWorkerConfig: async (workerId, config) => {
-            await registry.updateWorkerConfig(workerId, config);
+            await registry.updateUnitState(workerId, config);
         },
         updateProcessConfig: async (processId, config) => {
-            await registry.updateProcessConfig(processId, config);
+            await registry.updateUnitState(processId, config);
         },
         // The enable/disable methods also need to use the current registry
         disableUnit: (id) => registry.updateUnitState(id, { enabled: false }),
