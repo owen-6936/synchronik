@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.3.0] - 2025-11-29
+
+### ✨ Added (v2.3.0)
+
+- **State Persistence & Hydration**:
+  - Introduced a major new feature to make workflows resilient to server restarts and crashes.
+  - Added a `StorageAdapter` interface for saving and loading engine state.
+  - Shipped a default `FileStorageAdapter` to persist state to a local JSON file.
+  - Added a new `manager.useStorage(adapter)` method to initialize persistence. The engine now automatically saves state changes and hydrates itself on startup.
+
+### ♻️ Changed (v2.3.0)
+
+- **Asynchronous State-Changing Operations**:
+  - To support persistence, several methods on the `SynchronikManager` are now `async` and must be awaited. This is a crucial change for ensuring state is saved before proceeding.
+  - Affected methods include: `updateStatus`, `updateWorkerConfig`, `updateProcessConfig`, `enableWorker`, `disableWorker`, `enableProcess`, and `disableProcess`.
+
+### 🐛 Fixed (v2.3.0)
+
+- **Correct `runCount` in Manual Runs**: Fixed a critical bug where `runWorkerById` would not increment the worker's `runCount` metadata after a successful run, causing state hydration to appear incorrect. The `runCount` is now reliably updated for all execution types.
+
+---
+
 ## [v2.2.0] - 2025-11-27
 
 ### ✨ Added (v2.2.0)

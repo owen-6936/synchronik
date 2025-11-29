@@ -1,0 +1,13 @@
+[
+    {
+        "id": "counter-worker",
+        "name": "Persistent Counter",
+        "enabled": true,
+        "status": "completed",
+        "meta": {
+            "executionTimesMs": [1, 0, 0],
+            "averageExecutionTimeMs": 0.3333333333333333,
+            "runCount": 3
+        }
+    }
+]

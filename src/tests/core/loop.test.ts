@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createSynchronikLoop } from "../../core/loop";
-import { createMilestoneEmitter, SynchronikEventBus } from "../../core/event";
+import { SynchronikEventBus } from "../../core/event";
 import { SynchronikRegistry, SynchronikUnit } from "../../types/synchronik";
 import { ReactiveRegistry } from "../../core/ReactiveRegistry";
 
@@ -35,8 +35,7 @@ describe("SynchronikLoop", () => {
 
     beforeEach(() => {
         eventBus = new SynchronikEventBus();
-        const milestoneEmitter = createMilestoneEmitter(eventBus);
-        registry = new ReactiveRegistry(milestoneEmitter, eventBus);
+        registry = new ReactiveRegistry(eventBus);
         loop = createSynchronikLoop(registry);
 
         // Prevent unhandled error exceptions by adding a dummy listener for the 'error' event.
@@ -162,8 +161,8 @@ describe("SynchronikLoop", () => {
     });
 
     it("emits milestone with runMode in payload", async () => {
-        const milestoneSpy = vi.fn();
-        eventBus.subscribe("milestone", milestoneSpy);
+        const updateSpy = vi.fn();
+        eventBus.subscribe("updated", updateSpy);
 
         const p = mockProcess("p8", ["w13"]);
         p.runMode = "parallel";
@@ -172,10 +171,8 @@ describe("SynchronikLoop", () => {
 
         await loop.run();
 
-        const milestonePayloads = milestoneSpy.mock.calls.map(
-            ([e]) => e.payload
-        );
-        const hasRunMode = milestonePayloads.some(
+        const updatePayloads = updateSpy.mock.calls.map(([e]) => e.payload);
+        const hasRunMode = updatePayloads.some(
             (payload) => payload?.runMode === "parallel"
         );
 

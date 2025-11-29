@@ -1,5 +1,6 @@
 import type {
     SynchronikEvent,
+    StorageAdapter,
     SynchronikLoop,
     SynchronikManager,
     SynchronikProcess,
@@ -47,10 +48,7 @@ export function createSynchronikManager(options?: {
 
     const eventBus = new SynchronikEventBus();
     const milestoneEmitter = createMilestoneEmitter(eventBus);
-    const registry: SynchronikRegistry = new ReactiveRegistry(
-        milestoneEmitter,
-        eventBus
-    );
+    let registry: SynchronikRegistry = new ReactiveRegistry(eventBus);
 
     const lifecycle = createSynchronikLifecycle(
         registry,
@@ -83,11 +81,57 @@ export function createSynchronikManager(options?: {
     let lastCpuUsage: NodeJS.CpuUsage | undefined;
     let lastCpuTime: number | undefined;
 
-    const managerApi: SynchronikManager = {
+    const managerApi: Omit<
+        SynchronikManager,
+        | "registerUnit"
+        | "releaseUnit"
+        | "updateStatus"
+        | "updateWorkerConfig"
+        | "updateProcessConfig"
+        | "disableUnit"
+        | "disableWorker"
+        | "disableProcess"
+        | "enableUnit"
+        | "enableWorker"
+        | "enableProcess"
+        | "stopWorkerById"
+        | "onStart"
+        | "onComplete"
+        | "onError"
+        | "useWorkerPool"
+    > &
+        Partial<SynchronikManager> = {
+        useStorage: async function (adapter: StorageAdapter) {
+            // Preserve any units that were registered before storage was initialized.
+            const existingUnits = registry.listUnits();
+
+            // Re-initialize the registry with the storage adapter.
+            // This is the key to avoiding fragile, on-the-fly method overrides.
+            registry = new ReactiveRegistry(eventBus, adapter);
+
+            // Re-register the preserved units into the new registry.
+            existingUnits.forEach((unit) => registry.registerUnit(unit));
+
+            // Load state from storage
+            const loadedUnits = await adapter.loadState();
+            if (loadedUnits) {
+                // Hydrate the registry by merging the loaded state into existing units.
+                // This assumes units are registered first, then state is loaded.
+                for (const unit of loadedUnits) {
+                    const existingUnit = registry.getUnitById(unit.id);
+                    if (existingUnit) {
+                        await registry.updateUnitState(unit.id, unit, true); // Pass the hydration flag
+                    }
+                }
+                milestoneEmitter.emit("storage:loaded", {
+                    count: loadedUnits.length,
+                });
+            }
+        },
         /**
          * Starts the engine's background processes, including the main execution loop and the unit watcher.
          */
-        start() {
+        start: function () {
             loopInterval = setInterval(() => loop.run(), loopIntervalMs);
             watcherInterval = setInterval(
                 () => watcher.scan(),
@@ -97,12 +141,11 @@ export function createSynchronikManager(options?: {
             if (statsEmissionIntervalMs) {
                 statsInterval = setInterval(() => {
                     const stats = this.getEngineStats();
-                    milestoneEmitter.emit("engine:stats", stats);
                 }, statsEmissionIntervalMs);
             }
         },
 
-        async stop() {
+        stop: async function () {
             if (loopInterval) clearInterval(loopInterval);
             if (watcherInterval) clearInterval(watcherInterval);
             if (statsInterval) clearInterval(statsInterval);
@@ -145,7 +188,7 @@ export function createSynchronikManager(options?: {
             }
         },
 
-        startAll() {
+        startAll: function () {
             for (const unit of registry.listUnits()) {
                 if (unit.status === "paused") {
                     lifecycle.update(unit.id, { status: "idle" });
@@ -153,13 +196,13 @@ export function createSynchronikManager(options?: {
             }
         },
 
-        stopAll() {
+        stopAll: function () {
             for (const unit of registry.listUnits()) {
                 lifecycle.update(unit.id, { status: "paused" });
             }
         },
 
-        async runWorkerById(id) {
+        runWorkerById: async function (id) {
             const worker = registry.getWorkerById(id);
             if (!worker) {
                 return;
@@ -167,12 +210,32 @@ export function createSynchronikManager(options?: {
 
             try {
                 await executeWorkerWithRetry(worker, registry);
+
+                // After a successful manual run, update the runCount meta property.
+                if (worker.status === "completed") {
+                    const newRunCount = (worker.meta?.runCount ?? 0) + 1;
+                    const newMeta = {
+                        ...worker.meta,
+                        runCount: newRunCount,
+                    };
+
+                    await registry.updateUnitState(worker.id, {
+                        meta: newMeta,
+                    });
+
+                    // Also handle the maxRuns logic
+                    if (worker.maxRuns && newRunCount >= worker.maxRuns) {
+                        await registry.updateUnitState(worker.id, {
+                            enabled: false,
+                        });
+                    }
+                }
             } catch {
                 // The error is already handled and logged by executeWorkerWithRetry, so we just catch it here to prevent it from crashing the test.
             }
         },
 
-        async runProcessById(id) {
+        runProcessById: async function (id) {
             const process = registry.getProcessById(id);
             if (!process || process.status === "paused") return;
 
@@ -232,25 +295,13 @@ export function createSynchronikManager(options?: {
             });
         },
 
-        runLoopOnce(): Promise<void> {
+        runLoopOnce: function (): Promise<void> {
             return loop.run();
         },
 
-        runWatcherScan(): void {
+        runWatcherScan: function (): void {
             watcher.scan();
         },
-
-        disableUnit: (id) => lifecycle.update(id, { enabled: false }),
-
-        disableWorker: (id) => lifecycle.update(id, { enabled: false }),
-
-        disableProcess: (id) => lifecycle.update(id, { enabled: false }),
-
-        enableUnit: (id) => lifecycle.update(id, { enabled: true }),
-
-        enableWorker: (id) => lifecycle.update(id, { enabled: true }),
-
-        enableProcess: (id) => lifecycle.update(id, { enabled: true }),
 
         getUnitStatus(id: string): SynchronikUnit["status"] | undefined {
             const unit = registry.getUnitById(id);
@@ -278,33 +329,20 @@ export function createSynchronikManager(options?: {
             return registry.listWorkers();
         },
 
-        emitMilestone(id: string, payload?: Record<string, unknown>) {
+        emitMilestone: function (
+            id: string,
+            payload?: Record<string, unknown>
+        ) {
             milestoneEmitter.emit(id, payload);
         },
 
-        subscribeToEvents(
+        subscribeToEvents: function (
             listener: (event: SynchronikEvent) => void
         ): () => void {
             return eventBus.subscribeAll(listener);
         },
 
-        // --- Direct Lifecycle, Registry, and Tracker Access ---
-
-        registerUnit: lifecycle.register,
-
-        stopWorkerById: (workerId: string) =>
-            lifecycle.update(workerId, { enabled: false }),
-        /** Releases a unit from the engine, removing it from the registry. */
-        releaseUnit: lifecycle.release,
-        /** Manually sets the status of a unit. Uses the active status management system. */
-        updateStatus: (unitId, status, options) => {
-            registry.updateUnitState(unitId, {
-                status,
-                ...options?.payload,
-            });
-        },
-
-        getRegistrySnapshot() {
+        getRegistrySnapshot: function () {
             const units = registry.listUnits();
             return units.map((unit) => {
                 // Create a cloneable version of the unit by omitting functions
@@ -319,56 +357,13 @@ export function createSynchronikManager(options?: {
             });
         },
 
-        onMilestone(handler) {
+        onMilestone: function (handler) {
             return eventBus.subscribe("milestone", (event) => {
                 handler(event.milestoneId, event.payload);
             });
         },
 
-        onStart(handler) {
-            return eventBus.subscribe("start", handler);
-        },
-
-        onComplete(handler) {
-            return eventBus.subscribe("complete", handler);
-        },
-
-        onError(handler) {
-            return eventBus.subscribe("error", handler);
-        },
-
-        useWorkerPool(poolSize: number = 5): WorkerManager {
-            const workerManager = new SynchronikWorkerManager(poolSize);
-
-            // Integrate the two: The WorkerManager will use the core Manager to execute tasks.
-            workerManager.setExecutor(this.runWorkerById, {
-                registerUnit: this.registerUnit,
-                releaseUnit: this.releaseUnit,
-            });
-
-            // Register the pool workers with the core manager so they are visible.
-            const poolWorkers = workerManager.getPoolWorkers();
-            poolWorkers.forEach((worker) => this.registerUnit(worker));
-
-            // Start the worker manager's loop when the core manager starts.
-            const originalStart = this.start;
-            this.start = () => {
-                originalStart();
-                workerManager.start();
-            };
-
-            return workerManager;
-        },
-
-        updateWorkerConfig(workerId, config) {
-            registry.updateWorkerConfig(workerId, config);
-        },
-
-        updateProcessConfig(processId, config) {
-            registry.updateProcessConfig(processId, config);
-        },
-
-        getEngineStats() {
+        getEngineStats: function () {
             const memoryUsage = process.memoryUsage();
 
             // --- CPU Percentage Calculation ---
@@ -407,5 +402,62 @@ export function createSynchronikManager(options?: {
         },
     };
 
-    return managerApi;
+    // Use a Proxy-like pattern to ensure all calls use the *current* registry
+    const finalManager: SynchronikManager = {
+        ...managerApi,
+        registerUnit: (unit) => registry.registerUnit(unit),
+        releaseUnit: (id) => registry.releaseUnit(id),
+        updateStatus: async (unitId, status, options) => {
+            await registry.updateUnitState(unitId, {
+                status,
+                ...options?.payload,
+            });
+        },
+        updateWorkerConfig: async (workerId, config) => {
+            await registry.updateWorkerConfig(workerId, config);
+        },
+        updateProcessConfig: async (processId, config) => {
+            await registry.updateProcessConfig(processId, config);
+        },
+        // The enable/disable methods also need to use the current registry
+        disableUnit: (id) => registry.updateUnitState(id, { enabled: false }),
+        disableWorker: (id) => registry.updateUnitState(id, { enabled: false }),
+        disableProcess: (id) =>
+            registry.updateUnitState(id, { enabled: false }),
+        enableUnit: (id) => registry.updateUnitState(id, { enabled: true }),
+        enableWorker: (id) => registry.updateUnitState(id, { enabled: true }),
+        enableProcess: (id) => registry.updateUnitState(id, { enabled: true }),
+        stopWorkerById: (workerId: string) =>
+            registry.updateUnitState(workerId, { enabled: false }),
+
+        // Event-specific subscriptions
+        onStart: (handler) => eventBus.subscribe("start", handler),
+        onComplete: (handler) => eventBus.subscribe("complete", handler),
+        onError: (handler) => eventBus.subscribe("error", handler),
+
+        // Now, implement useWorkerPool here where `this` refers to the final object
+        useWorkerPool: function (poolSize: number = 5): WorkerManager {
+            const workerManager = new SynchronikWorkerManager(poolSize);
+
+            // Integrate the two: The WorkerManager will use the core Manager to execute tasks.
+            workerManager.setExecutor(this.runWorkerById, {
+                registerUnit: this.registerUnit,
+                releaseUnit: this.releaseUnit,
+            });
+
+            // Register the pool workers with the core manager so they are visible.
+            const poolWorkers = workerManager.getPoolWorkers();
+            poolWorkers.forEach((worker) => this.registerUnit(worker));
+
+            // Start the worker manager's loop when the core manager starts.
+            const originalStart = this.start;
+            this.start = () => {
+                originalStart.call(this); // Ensure correct `this` context
+                workerManager.start();
+            };
+
+            return workerManager;
+        },
+    };
+    return finalManager;
 }

@@ -1,44 +1,36 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createSynchronikManager } from "../../core/manager";
 import type {
-    RunMode,
+    StorageAdapter,
     SynchronikWorker,
     SynchronikProcess,
+    SynchronikUnit,
 } from "../../types/synchronik";
+
+const mockWorker = (id: string): SynchronikWorker => ({
+    id,
+    status: "idle",
+    run: vi.fn().mockResolvedValue(undefined),
+    name: "Mock Worker",
+    enabled: true,
+});
+
+const mockProcess = (id: string, workerIds: string[]): SynchronikProcess => ({
+    id,
+    status: "idle",
+    workers: workerIds.map(mockWorker),
+    name: "Mock Process",
+    enabled: true,
+});
 
 describe("SynchronikManager", () => {
     let manager: ReturnType<typeof createSynchronikManager>;
     let events: any[];
 
-    const mockWorker = (id: string): SynchronikWorker => ({
-        id,
-        status: "idle",
-        run: vi.fn().mockResolvedValue(undefined),
-        name: "Mock Worker",
-        enabled: true,
-    });
-
-    const mockProcess = (
-        id: string,
-        workerIds: string[]
-    ): SynchronikProcess => ({
-        id,
-        status: "idle",
-        workers: workerIds.map(mockWorker),
-        name: "Mock Process",
-        enabled: true,
-    });
-
     beforeEach(() => {
         manager = createSynchronikManager();
         events = [];
-        manager.onMilestone((id, payload) => events.push({ id, payload }));
-        manager.subscribeToEvents((event) => {
-            // Standardize the event shape to always have an `id` property.
-            if (event.type === "error") {
-                events.push({ id: event.unitId, payload: event });
-            }
-        });
+        manager.subscribeToEvents((event) => events.push(event));
     });
 
     it("registers and snapshots units", () => {
@@ -65,7 +57,9 @@ describe("SynchronikManager", () => {
 
         await manager.runWorkerById("w2");
         expect(w.run).toHaveBeenCalled();
-        expect(events.some((e) => e.id.includes("w2"))).toBe(true);
+        expect(
+            events.some((e) => e.type === "updated" && e.unitId === "w2")
+        ).toBe(true);
     });
 
     it("runs a process and all its workers", async () => {
@@ -78,8 +72,12 @@ describe("SynchronikManager", () => {
             expect(worker.run).toHaveBeenCalled();
         }
 
-        expect(events.some((e) => e.id.includes("w3"))).toBe(true);
-        expect(events.some((e) => e.id.includes("w4"))).toBe(true);
+        expect(
+            events.some((e) => e.type === "updated" && e.unitId === "w3")
+        ).toBe(true);
+        expect(
+            events.some((e) => e.type === "updated" && e.unitId === "w4")
+        ).toBe(true);
     });
 
     it("gracefully stops all units", async () => {
@@ -103,8 +101,12 @@ describe("SynchronikManager", () => {
 
         expect(w1.run).toHaveBeenCalled();
         expect(w2.run).toHaveBeenCalled();
-        expect(events.some((e) => e.id.includes("w5"))).toBe(true);
-        expect(events.some((e) => e.id.includes("w6"))).toBe(true);
+        expect(
+            events.some((e) => e.type === "updated" && e.unitId === "w5")
+        ).toBe(true);
+        expect(
+            events.some((e) => e.type === "updated" && e.unitId === "w6")
+        ).toBe(true);
         expect(manager.getUnitStatus("w5")).toBe("completed");
         expect(manager.getUnitStatus("w6")).toBe("completed");
     });
@@ -124,7 +126,9 @@ describe("SynchronikManager", () => {
 
         manager.updateStatus("w8", "error", { payload: { reason: "fail" } });
 
-        expect(events.some((e) => e.id?.includes("w8"))).toBe(true);
+        expect(
+            events.some((e) => e.type === "updated" && e.unitId === "w8")
+        ).toBe(true);
     });
 
     it("startAll and stopAll update unit states", () => {
@@ -140,6 +144,32 @@ describe("SynchronikManager", () => {
         manager.startAll();
         expect(manager.getUnitStatus("w9")).toBe("idle");
         expect(manager.getUnitStatus("w10")).toBe("idle");
+    });
+
+    it("can disable and enable a worker", () => {
+        const worker = mockWorker("w-toggle");
+        manager.registerUnit(worker);
+
+        expect(manager.getUnitById("w-toggle")?.enabled).toBe(true);
+
+        manager.disableWorker("w-toggle");
+        expect(manager.getUnitById("w-toggle")?.enabled).toBe(false);
+
+        manager.enableWorker("w-toggle");
+        expect(manager.getUnitById("w-toggle")?.enabled).toBe(true);
+    });
+
+    it("can disable and enable a process", () => {
+        const process = mockProcess("p-toggle", []);
+        manager.registerUnit(process);
+
+        expect(manager.getUnitById("p-toggle")?.enabled).toBe(true);
+
+        manager.disableProcess("p-toggle");
+        expect(manager.getUnitById("p-toggle")?.enabled).toBe(false);
+
+        manager.enableProcess("p-toggle");
+        expect(manager.getUnitById("p-toggle")?.enabled).toBe(true);
     });
     it("runs process in parallel mode", async () => {
         const p = mockProcess("p-parallel", ["w11", "w12"]);
@@ -251,9 +281,8 @@ describe("SynchronikManager", () => {
             enabled: true,
             status: "idle",
             run: async () => {
-                const { runWorkerTasks } = await import(
-                    "../../utils/task-runner"
-                );
+                const { runWorkerTasks } =
+                    await import("../../utils/task-runner");
                 const results = await runWorkerTasks({
                     items: ["task-ok-1", "task-fail", "task-ok-2"],
                     execute: async (item) => {
@@ -287,7 +316,11 @@ describe("SynchronikManager", () => {
         expect(manager.getUnitStatus("containerizer-worker")).toBe("completed");
         expect(manager.getUnitStatus("mixed-process")).toBe("completed");
 
-        const milestone = events.find((e) => e.id === "containerizer-finished");
+        const milestone = events.find(
+            (e) =>
+                e.type === "milestone" &&
+                e.milestoneId === "containerizer-finished"
+        );
         expect(milestone).toBeDefined();
         expect(milestone.payload.successPercentage).toBeCloseTo(66.67);
         expect(milestone.payload.failed).toHaveLength(1);
@@ -319,7 +352,7 @@ describe("SynchronikManager", () => {
         // 3. Verify that an 'error' event was emitted for the unit
         expect(
             events.some(
-                (e) => e.payload?.type === "error" && e.id === "failing-worker"
+                (e) => e.type === "error" && e.unitId === "failing-worker"
             )
         ).toBe(true);
     });
@@ -368,10 +401,12 @@ describe("SynchronikManager", () => {
         expect(manager.getUnitStatus("dynamic-retry-worker")).toBe("error");
 
         // 2. Dynamically update the worker's configuration to allow retries.
-        manager.updateWorkerConfig("dynamic-retry-worker", { maxRetries: 1 });
+        await manager.updateWorkerConfig("dynamic-retry-worker", {
+            maxRetries: 1,
+        });
 
         // 3. Reset the worker's status to 'idle' so it can be run again.
-        manager.updateStatus("dynamic-retry-worker", "idle");
+        await manager.updateStatus("dynamic-retry-worker", "idle");
 
         // 4. Run the worker again. It should now use the new config, retry once, and succeed.
         await manager.runWorkerById("dynamic-retry-worker");
@@ -425,5 +460,83 @@ describe("SynchronikManager - Engine Stats", () => {
         // total elapsed CPU = (200000 - 100000) + (75000 - 50000) = 125000
         // percentage = (125000 / 1000000) * 100 = 12.5%
         expect(secondStats.cpu).toBe("12.50%");
+    });
+});
+
+describe("SynchronikManager - Fierce Testing", () => {
+    it("should handle hot-swapping worker config during a process run", async () => {
+        // 1. Define a process with two sequential workers.
+        // The first worker will have a delay to give us time to change the second one.
+        const w1 = mockWorker("hot-swap-w1");
+        w1.run = () => new Promise((resolve) => setTimeout(resolve, 50)); // 50ms delay
+
+        const w2 = mockWorker("hot-swap-w2");
+        w2.meta = { original: true }; // Initial config
+
+        const p: SynchronikProcess = {
+            id: "hot-swap-process",
+            name: "Hot Swap Process",
+            enabled: true,
+            runMode: "sequential", // Crucial for this test
+            workers: [w1, w2],
+        };
+
+        const manager = createSynchronikManager();
+        manager.registerUnit(p);
+
+        // 2. Start the process. Don't await it yet.
+        const processPromise = manager.runProcessById("hot-swap-process");
+
+        // 3. Immediately (while w1 is "running"), update the config of w2.
+        await manager.updateWorkerConfig("hot-swap-w2", {
+            meta: { original: false, updated: true },
+        });
+
+        // 4. Now, await the process completion.
+        await processPromise;
+
+        // 5. Assert that the final state of w2 reflects the "hot-swapped" config.
+        const finalW2 = manager.getUnitById("hot-swap-w2");
+        expect(finalW2?.meta?.original).toBe(false);
+        expect(finalW2?.meta?.updated).toBe(true);
+    });
+});
+
+describe("SynchronikManager - State Persistence", () => {
+    it("saves state after an update and hydrates it on creation", async () => {
+        const mockState: SynchronikUnit[] = [];
+
+        // 1. Create a mock storage adapter
+        const mockAdapter: StorageAdapter = {
+            saveState: vi.fn(async (units) => {
+                // In a real scenario, this writes to a file/db. Here, we just store it in memory.
+                mockState.length = 0; // Clear the array
+                mockState.push(...JSON.parse(JSON.stringify(units))); // Deep copy
+            }),
+            loadState: vi.fn(async () => {
+                return mockState.length > 0 ? mockState : null;
+            }),
+        };
+
+        // 2. Create a manager and update a worker's status
+        const manager1 = createSynchronikManager();
+        await manager1.useStorage(mockAdapter);
+        const worker = mockWorker("persistent-worker");
+        manager1.registerUnit(worker);
+
+        await manager1.updateStatus("persistent-worker", "running");
+
+        // Verify that saveState was called and the in-memory state was updated
+        expect(mockAdapter.saveState).toHaveBeenCalled();
+        expect(mockState[0].id).toBe("persistent-worker");
+        expect(mockState[0].status).toBe("running");
+
+        // 3. Create a NEW manager instance, which should hydrate from the mock adapter
+        const manager2 = createSynchronikManager();
+        await manager2.useStorage(mockAdapter);
+        manager2.registerUnit(worker); // Re-register the worker to provide its `run` function
+
+        // Verify that the new manager has the state from the previous one
+        expect(manager2.getUnitStatus("persistent-worker")).toBe("running");
     });
 });

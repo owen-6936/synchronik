@@ -6,6 +6,7 @@ import type {
     SynchronikRegistry,
     SynchronikUnit,
     SynchronikWorker,
+    StorageAdapter,
 } from "../types/synchronik.js";
 
 /**
@@ -17,16 +18,16 @@ export class ReactiveRegistry implements SynchronikRegistry {
     private units = new Map<string, SynchronikUnit>();
     private workers = new Map<string, SynchronikWorker>();
     private processes = new Map<string, SynchronikProcess>();
-    private milestoneEmitter?: MilestoneEmitter;
     private executionTimers = new Map<string, number>();
     private eventBus?: ISynchronikEventBus;
+    private storageAdapter?: StorageAdapter | undefined;
 
     constructor(
-        milestoneEmitter: MilestoneEmitter,
-        eventBus: ISynchronikEventBus
+        eventBus: ISynchronikEventBus,
+        storageAdapter?: StorageAdapter
     ) {
-        this.milestoneEmitter = milestoneEmitter;
         this.eventBus = eventBus;
+        this.storageAdapter = storageAdapter;
     }
 
     /**
@@ -73,16 +74,22 @@ export class ReactiveRegistry implements SynchronikRegistry {
     /**
      * Updates the state of a unit and triggers reactive side effects, such as event emission and parent process status updates.
      */
-    updateUnitState<T extends SynchronikUnit>(
+    async updateUnitState<T extends SynchronikUnit>(
         id: string,
-        updates: Partial<T>
-    ): void {
+        updates: Partial<T>,
+        _isHydration = false // Add a flag to skip persistence during hydration
+    ): Promise<void> {
         const unit = this.units.get(id);
         if (!unit) return;
 
+        // Create a snapshot of configuration properties before the update.
+        // We exclude runtime state like 'status' and 'lastRun'.
+        const { status: _, lastRun: __, ...configBefore } = unit;
+        const configBeforeJson = JSON.stringify(configBefore);
+
         const oldStatus = unit.status;
         Object.assign(unit, updates);
-        const newStatus = unit.status;
+        const newStatus = unit.status; // Get the potentially new status
 
         // Ensure meta object exists for the lifetime of the unit
         if (!unit.meta) {
@@ -117,35 +124,46 @@ export class ReactiveRegistry implements SynchronikRegistry {
             this.executionTimers.delete(id); // Clean up timer on completion or error
         }
 
-        // If the status has changed, emit a milestone.
-        if (newStatus && newStatus !== oldStatus) {
-            if (newStatus === "error" && this.eventBus && updates.error) {
-                // Emit a dedicated 'error' event for failures.
+        // Compare the configuration snapshot to detect any changes.
+        const { status: ___, lastRun: ____, ...configAfter } = unit;
+        const configAfterJson = JSON.stringify(configAfter);
+
+        const statusChanged = newStatus && newStatus !== oldStatus;
+        const configChanged = configBeforeJson !== configAfterJson;
+
+        if (statusChanged || configChanged) {
+            if (this.eventBus) {
+                // Determine the primary reason for the update
+                const reason = statusChanged
+                    ? "status-change"
+                    : "config-change";
+
+                // Emit a single, unified 'updated' event
                 this.eventBus.emit({
-                    type: "error",
+                    type: "updated",
                     unitId: id,
-                    error: updates.error as Error,
+                    payload: {
+                        ...unit,
+                        reason,
+                        previous: oldStatus,
+                        current: newStatus,
+                    },
                 });
-            } else if (this.milestoneEmitter) {
-                const payload: Record<string, unknown> = {
-                    ...unit, // Spread the whole unit for a complete, predictable payload
-                    previous: oldStatus,
-                    current: newStatus,
-                    reason: "status-change", // Add explicit reason for the event
-                };
 
-                // The subtle touch: add duration to the complete event payload
-                if (newStatus === "completed") {
-                    const times =
-                        (unit.meta?.executionTimesMs as number[]) || [];
-                    payload.durationMs = times[times.length - 1];
+                // Also emit specific lifecycle events if the status changed
+                if (statusChanged) {
+                    if (newStatus === "running")
+                        this.eventBus.emit({ type: "start", unitId: id });
+                    if (newStatus === "completed")
+                        this.eventBus.emit({ type: "complete", unitId: id });
+                    if (newStatus === "error" && updates.error) {
+                        this.eventBus.emit({
+                            type: "error",
+                            unitId: id,
+                            error: updates.error as Error,
+                        });
+                    }
                 }
-
-                this.milestoneEmitter.emitForUnit(
-                    id,
-                    String(newStatus),
-                    payload
-                );
             }
         }
 
@@ -154,6 +172,17 @@ export class ReactiveRegistry implements SynchronikRegistry {
         const worker = this.workers.get(id);
         if (worker?.processId) {
             this.updateProcessStatus(worker.processId);
+        }
+
+        // --- State Persistence ---
+        if (this.storageAdapter && !_isHydration) {
+            try {
+                await this.storageAdapter.saveState(this.listUnits());
+            } catch (error) {
+                // Log the persistence error but do not crash the application.
+                // The in-memory state remains valid.
+                console.error("[Synchronik] Failed to save state:", error);
+            }
         }
     }
 
@@ -169,19 +198,20 @@ export class ReactiveRegistry implements SynchronikRegistry {
 
         if (process.status !== newProcessStatus) {
             const oldStatus = process.status;
-            // Directly update the process status without causing a recursive loop
             Object.assign(process, { status: newProcessStatus });
-            if (this.milestoneEmitter) {
-                this.milestoneEmitter.emitForUnit(
-                    processId,
-                    String(newProcessStatus),
-                    {
-                        ...process, // Spread the whole process for a complete payload
+
+            // Also emit a unified 'updated' event for the process status change
+            if (this.eventBus) {
+                this.eventBus.emit({
+                    type: "updated",
+                    unitId: processId,
+                    payload: {
+                        ...process,
+                        reason: "status-change",
                         previous: oldStatus,
                         current: newProcessStatus,
-                        reason: "status-change", // Add explicit reason
-                    }
-                );
+                    },
+                });
             }
         }
     }
@@ -218,17 +248,17 @@ export class ReactiveRegistry implements SynchronikRegistry {
     /**
      * Updates the configuration of a process.
      */
-    updateProcessConfig = (
+    updateProcessConfig = async (
         id: string,
         config: Partial<SynchronikProcess>
-    ): void => this.updateUnitState(id, config);
+    ): Promise<void> => await this.updateUnitState(id, config);
     /**
      * Updates the configuration of a worker.
      */
-    updateWorkerConfig = (
+    updateWorkerConfig = async (
         id: string,
         config: Partial<SynchronikWorker>
-    ): void => this.updateUnitState(id, config);
+    ): Promise<void> => await this.updateUnitState(id, config);
     /**
      * Removes a unit from the registry.
      */
